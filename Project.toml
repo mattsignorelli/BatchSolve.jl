@@ -1,0 +1,13 @@
+name = "BatchOpt"
+uuid = "87e15b6a-8d99-4cf4-8ad5-fed92cf0c427"
+authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
