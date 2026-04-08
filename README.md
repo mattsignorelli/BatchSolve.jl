@@ -9,9 +9,9 @@
 
 Do you have a (GPU) vectorized residual/merit function that you want to solve? Do you want to solve it using automatic differentiation for 100,000 different parameter configurations in parallel? Or is your problem not autodifferentiable, and you're looking for a SIMD-friendly finite differences method? Something lightweight, easily precompileable, and supporting a mutable interface? Look no further!
 
-`BatchSolve.jl` aims to provide various functionalities for solving batch-able, vectorized residual functions (for root finding) and objective functions (for minimizing). As long as your function is vectorizable, then `BatchSolve.jl` will take care of the rest!
+`BatchSolve.jl` aims to provide various functionalities for solving batch-able, vectorized residual functions (for root finding) and objective functions (for minimizing). As long as your function is vectorized, then `BatchSolve.jl` will take care of the rest!
 
-What do we mean by "vectorizable"? Say you want to find the root `x` of this function given some parameters `p`:
+What do we mean by "vectorized"? Say you want to find the root `x` of this function given some parameters `p`:
 
 ```julia
 f(x, p) = (x-1)^2 - p^2
@@ -23,17 +23,21 @@ You can do this easily with a Newton or Brent method, of course, probably availa
 f_vectorized(x, p) = f.(x, p)
 ```
 
-The result of `f_vectorized` will be a vector where each element is the corresponding `f(x,p)`, and the evaluation will take advantage of SIMD if your CPU supports it. Better yet, if `x` and `p` are GPU arrays (e.g. `CuArray` for NVIDIA CUDA or `MtlArray` for Apple Metal), then the evaluation will be GPU-parallelized!
+The result of `f_vectorized` will be a vector where each element is the corresponding `f(x,p)`, and the evaluation will (hopefully) take advantage of SIMD if your CPU supports it. Better yet, if `x` and `p` are GPU arrays (e.g. `CuArray` for NVIDIA CUDA or `MtlArray` for Apple Metal), then the evaluation will be GPU-parallelized!
+
+With `BatchSolve.jl`, we can do root finding 
 
 Now we can easily do a Newton method or Brent method with this:
 
+Of course, `BatchSolve.jl` is not limited to only 1D functions. Consider this example, where we want to find the roots of this 2x2 system, for 100,000 different paramter configurations in parallel:
+
 ## Should you NOT use this package?
 
-This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose in order to get reasonable results for their problem. This is quite different from the polyalgorithm approaches in other packages, e.g. `Optimization.jl` or `BlackBoxOptim.jl`, which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all this package will tell you is that it failed (and give you the last Jacobian if derivatives are used). 
+This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose for their problem in order to get reasonable results. This is quite different from the polyalgorithm approaches in other packages, e.g. `Optimization.jl` or `BlackBoxOptim.jl`, which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all this package will tell you is that it failed (and give you the last Jacobian if derivatives are used). 
 
 
 
-Of course, `BatchSolve.jl` is not limited to only 1D functions. Consider this example, where we want to find the roots of this 2x2 system, for 100,000 different paramter configurations in parallel:
+
 
 
 
