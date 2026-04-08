@@ -1,14 +1,14 @@
-using BatchOpt
+using BatchSolve
 using Documenter
 
-DocMeta.setdocmeta!(BatchOpt, :DocTestSetup, :(using BatchOpt); recursive=true)
+DocMeta.setdocmeta!(BatchSolve, :DocTestSetup, :(using BatchSolve); recursive=true)
 
 makedocs(;
-    modules=[BatchOpt],
+    modules=[BatchSolve],
     authors="mattsignorelli <mgs255@cornell.edu> and contributors",
-    sitename="BatchOpt.jl",
+    sitename="BatchSolve.jl",
     format=Documenter.HTML(;
-        canonical="https://mattsignorelli.github.io/BatchOpt.jl",
+        canonical="https://mattsignorelli.github.io/BatchSolve.jl",
         edit_link="main",
         assets=String[],
     ),
@@ -18,6 +18,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/mattsignorelli/BatchOpt.jl",
+    repo="github.com/mattsignorelli/BatchSolve.jl",
     devbranch="main",
 )

@@ -1,6 +1,6 @@
-using BatchOpt
+using BatchSolve
 using Test
 
-@testset "BatchOpt.jl" begin
+@testset "BatchSolve.jl" begin
     # Write your tests here.
 end

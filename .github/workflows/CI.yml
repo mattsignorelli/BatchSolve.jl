@@ -68,6 +68,6 @@ jobs:
         shell: julia --project=docs --color=yes {0}
         run: |
           using Documenter: DocMeta, doctest
-          using BatchOpt
-          DocMeta.setdocmeta!(BatchOpt, :DocTestSetup, :(using BatchOpt); recursive=true)
-          doctest(BatchOpt)
+          using BatchSolve
+          DocMeta.setdocmeta!(BatchSolve, :DocTestSetup, :(using BatchSolve); recursive=true)
+          doctest(BatchSolve)

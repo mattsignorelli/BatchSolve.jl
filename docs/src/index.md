@@ -1,14 +1,14 @@
 ```@meta
-CurrentModule = BatchOpt
+CurrentModule = BatchSolve
 ```
 
-# BatchOpt
+# BatchSolve
 
-Documentation for [BatchOpt](https://github.com/mattsignorelli/BatchOpt.jl).
+Documentation for [BatchSolve](https://github.com/mattsignorelli/BatchSolve.jl).
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [BatchOpt]
+Modules = [BatchSolve]
 ```
