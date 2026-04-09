@@ -5,8 +5,6 @@
 [![Build Status](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/mattsignorelli/BatchSolve.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mattsignorelli/BatchSolve.jl)
 
-## Should you use this package?
-
 Do you have a (GPU) vectorized residual/merit function that you want to solve? Do you want to solve it using automatic differentiation for 100,000 different parameter configurations in parallel? Or is your problem not autodifferentiable, and you're looking for a SIMD-friendly finite differences method? Something lightweight, easily precompileable, and supporting a mutable interface? Perhaps plugging directly into CUDA's CUBLAS library for batched linear solving? Look no further!
 
 `BatchSolve.jl` aims to provide various functionalities for solving batch-able, vectorized residual functions (for root finding) and objective functions (for minimizing). As long as your function is vectorized, then `BatchSolve.jl` will take care of the rest! 
@@ -31,7 +29,7 @@ With `BatchSolve.jl`, we can do root finding on this function in a vectorized wa
 sol = newton(f_vectorized, zeros(10000), Constant(1:10000), batchdim=1)
 ```
 
-where we specified that `p` is a `Constant` - not mutated throughout function evaluation. Arguments could also be specified as `Cache` if they are mutated. These constructs are re-exported from [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl), and more details can be found [here](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/tutorials/advanced/#Contexts). For all automatic-differentiation purposes, `BatchSolve` uses `DifferentiationInterface`. Therefore it is easy to use a different AD backend, e.g. `Enzyme`:
+where we specified that `p` is a `Constant` - not mutated throughout function evaluation. Arguments could also be specified as `Cache` if they are mutated. These constructs are re-exported from [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl), and more details can be found [here](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/tutorials/advanced/#Contexts). For all automatic-differentiation (AD) purposes, `BatchSolve` uses `DifferentiationInterface`. Therefore it is easy to use a different AD backend, e.g. `Enzyme`:
 
 ```julia
 using Enzyme
@@ -78,14 +76,28 @@ The problem with this approach is that now instead of solving many small 2x2 sys
 
 For CUDA arrays, `BatchSolve.jl` plugs directly into CUDA's CUBLAS library which provides GPU-accelerated batched linear system solving.
 
-## Should you NOT use this package?
+Currently implemented batched solvers include:
 
-This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose for their problem in order to get reasonable results. This is quite different from the polyalgorithm approaches in other packages, e.g. `BlackBoxOptim.jl`, which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all `BatchSolve.jl` will tell you is that it failed (and give you the last Jacobian if derivatives are used). This package also lacks many features in comparison to e.g. [`NonlinearSolve.jl`](https://docs.sciml.ai/NonlinearSolve/stable/), like bounds, trust regions, etc. It is very barebones, but will get the job done fast and well if your problem is well paired with the selected solver.
+### Root Finders
+- Newton-Raphson `newton` (uses derivatives)
 
+### Minimizers
+- Differential evolution `de`
+- Genetic algorithm `ga`
+- 1D Brent's method `brent`
+ 
 ## Data Structures, SIMD, and which `batchdim`?
 
-While the example shown above uses the broadcast operators with GPU arrays, you can of course use this package with any vectorized function. We generally recommend writing kernels explicitly with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/), and laying ouy memory in a SIMD-able, structure-of-arrays format. This would correspond to `batchdim=1` in Julia as a column-major language. The only thing to note is that for CUDA arrays with `batchdim=1`, the sparse Jacobian matrix must be `permutedims`-ed in order to be inputted into CUBLAS's batched linear system solver, and then the solution `permutedims`-ed back to the solution array. Depending on the cost of your function, it is possible that using `batchdim=2` (for array-of-structures) is faster. Therefore we recommended testing both for your particular use case.
+While the example shown above uses the broadcast operators with GPU arrays, you can of course use this package with any vectorized function. We generally recommend writing kernels explicitly with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/), and laying ouy memory in a SIMD-able, structure-of-arrays format. This would correspond to `batchdim=1` in Julia as a column-major language. The only thing to note is that for CUDA arrays with `batchdim=1`, the sparse Jacobian matrix must be `permutedims`-ed in order to be inputted into CUBLAS's batched linear system solver, and then the solution `permutedims`-ed back to the solution array. Depending on the cost of your function, it is possible that using `batchdim=2` (for array-of-structures) is faster, because this `permutedims` is then not necessary. Therefore we recommended testing both for your particular use case.
+
+## Vectorized Finite Differences
+
+This package also features an experimental AD backend `AutoVecFD`, which accelerates a finite differences calculation for vectorized functions: if a function is vectorized, then instead of evaluating the same function many times for each tangent, we can just evaluate it a single time for all tangents. This can offer massive speedups in the case where your function is extremely expensive to evaluate.
+
+## Should you NOT use this package?
+
+This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose for their problem in order to get reasonable results. This is quite different from the polyalgorithm approaches in other packages, e.g. [`BlackBoxOptim.jl`](https://github.com/SciML/BlackBoxOptim.jl), which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all `BatchSolve.jl` will tell you is that it failed (and give you the last Jacobian if derivatives are used). This package also lacks many features in comparison to e.g. [`NonlinearSolve.jl`](https://docs.sciml.ai/NonlinearSolve/stable/), like bounds, trust regions, etc. It is very barebones in comparison, but will get the job done fast and correctly if your problem is well-paired with the selected solver.
 
 ## Acknowledgements
 
-`BatchSolve.jl` makes very heavy use of the powerful [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl) package. It goes without saying that `BatchSolve.jl` would not be possible without the massive amount of careful work put into `DifferentiationInterface.jl`. We are extremely thankful for this work.
+`BatchSolve.jl` makes very heavy use of the powerful [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl) package and its sparse automatic-differentiation features via [`SparseMatrixColorings.jl`](https://github.com/JuliaDiff/SparseMatrixColorings.jl). It goes without saying that `BatchSolve.jl` would not be possible without the massive amount of careful work put into both of these packages. We are extremely thankful for this work.
