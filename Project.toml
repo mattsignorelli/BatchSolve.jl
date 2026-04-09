@@ -29,8 +29,8 @@ CUDA = "5.9"
 DifferentiationInterface = "0.7.4"
 ForwardDiff = "0.10,1"
 GPUArraysCore = "0.2.0"
+SparseMatrixColorings = "0.4.26"
 julia = "1.10"
-
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
