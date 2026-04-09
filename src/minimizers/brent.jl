@@ -4,7 +4,7 @@ This entire file was written by iterating with Claude.
 
 =#
 
-function brent(g, x::AbstractArray{T}, params...; xa, xb, tol=T(1e-13), maxiter=500, check_every=1)
+function brent(g, x::AbstractArray, params...; xa, xb, tol=eltype(x)(1e-13), maxiter=500, check_every=1)
     g!(_y, x) = (_y .= g(x, params...); _y)
     y = g(x, params...)
     sol = brent!(g!, y, x, params...; xa, xb, tol, maxiter, check_every)
@@ -23,6 +23,8 @@ values reduce host-sync overhead on GPU for expensive `g`.
 Set to 0 to skip mid-loop checks (one final check always runs at return).
 
 DOES NOT SUPPORT SCALAR EVALUATION!
+
+Note no batchdim here because 1D so any direction is used
 """
 @generated function brent!(
     g!::Function,
