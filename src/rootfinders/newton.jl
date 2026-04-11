@@ -146,8 +146,8 @@ function newton!(
   abstol=sqrt(eps(eltype(y))), 
   maxiter=100, 
   batchdim::Union{Nothing,Integer}=nothing, 
-  iters=isnothing(batchdim) ? nothing : similar(x, Int, size(x, batchdim)), # If batch, then array that should be modified in-place with the iteration when convergence reached
-  retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, size(x, batchdim)),
+  iters=isnothing(batchdim) ? nothing : similar(x, Int, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())), # If batch, then array that should be modified in-place with the iteration when convergence reached
+  retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())),
   solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), 
   dx=zero.(x),
 ) where {T}
@@ -198,10 +198,6 @@ function newton!(
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
       solver(dx, jac, y)
-      @show size(dx)
-      @show size(out.retcode)
-      @show size(any(isnan, dx, dims=otherdim))
-      @show size(ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode))
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
         (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1, 
@@ -228,7 +224,13 @@ function newton_solver(device, _y, _x, batchdim)
   _ly = length(_y)
   if isnothing(batchdim)
     let lx=_lx, ly=_ly
-      return (dx, jac, y)->(reshape(dx, lx) .= -jac \ reshape(y, ly))
+      return (dx, jac, y)->begin
+        if ArrayInterface.issingular(jac)
+          dx .= NaN32
+        else
+          reshape(dx, lx) .= -jac \ reshape(y, ly)
+        end
+      end
     end
   elseif batchdim == 2 # Do each serially
     _batchsize = size(_x, 2)

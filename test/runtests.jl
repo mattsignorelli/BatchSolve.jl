@@ -1,6 +1,10 @@
 using BatchSolve
 using Test
 
-@testset "BatchSolve.jl" begin
-    # Write your tests here.
-end
+@testset "Brent Minimizer" begin
+    include("brent_test.jl")
+end 
+
+@testset "Newton Root Finder" begin
+    include("newton_test.jl")
+end 

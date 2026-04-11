@@ -1,6 +1,6 @@
 module BatchSolve
 import DifferentiationInterface as DI
-using DifferentiationInterface: Constant, Cache, ConstantOrCache
+using DifferentiationInterface: Constant, Cache, ConstantOrCache, Context
 import KernelAbstractions as KA
 using Reexport
 @reexport using ADTypes
@@ -13,8 +13,8 @@ using Accessors,
     SparseArrays,
     SparseMatrixColorings
 
-export Constant, Cache, ConstantOrCache
-export newton, newton!
+export Constant, Cache, ConstantOrCache, Context
+export newton, newton!, brent, brent!
 
 # Wish I could use Enum but not GPU compatible.
 const RETCODE_SUCCESS = 0x0

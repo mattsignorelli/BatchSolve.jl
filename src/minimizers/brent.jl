@@ -4,11 +4,37 @@ This entire file was written by iterating with Claude.
 
 =#
 
-function brent(g, x::AbstractArray, params...; xa, xb, tol=eltype(x)(1e-13), maxiter=500, check_every=1)
-    g!(_y, x) = (_y .= g(x, params...); _y)
-    y = g(x, params...)
-    sol = brent!(g!, y, x, params...; xa, xb, tol, maxiter, check_every)
-    return 
+function brent(g, x::AbstractArray, contexts...; xa, xb, tol=eltype(x)(1e-13), maxiter=500, check_every=1)
+    # Brent doesn't use derivatives so parse either
+    if contexts isa Tuple{Vararg{Context}}
+        gc = DI.fix_tail(g, map(DI.unwrap, contexts)...)
+        y = gc(x)
+    else
+        y = g(x, contexts...)
+    end
+    g!(_y, _x, _contexts...) = (_y .= g(_x, _contexts...); _y)
+    return brent!(g!, y, copy(x), contexts...; xa, xb, tol, maxiter, check_every)
+end
+
+function brent!(
+    g!::Function,
+    y::AbstractArray,
+    x::AbstractArray,
+    contexts...;
+    xa,
+    xb,
+    tol         = eltype(x)(1e-13),
+    maxiter     = 500,
+    check_every = 1,
+)
+    @assert length(xa) == length(xb)
+    # Brent doesn't use derivatives so parse properly
+    if contexts isa Tuple{Vararg{Context}}
+        gc! = DI.fix_tail(g!, map(DI.unwrap, contexts)...)
+    else
+        gc! = (_y, _x)->g!(_y, _x, contexts...)
+    end
+    return _brent!(gc!, y, x; xa, xb, tol, maxiter, check_every)
 end
 
 """
@@ -26,11 +52,10 @@ DOES NOT SUPPORT SCALAR EVALUATION!
 
 Note no batchdim here because 1D so any direction is used
 """
-@generated function brent!(
+@generated function _brent!(
     g!::Function,
     y,
-    x::AbstractArray{T},
-    params...;
+    x::AbstractArray{T};
     xa,
     xb,
     tol         = T(1e-13),
@@ -49,7 +74,7 @@ Note no batchdim here because 1D so any direction is used
 
         @. x  = xa + $CGOLD * (xb - xa)
         gx = similar(y)
-        g!(gx, x, params...)
+        g!(gx, x)
         w  = copy(x);  gw = copy(gx)
         v  = copy(x);  gv = copy(gx)
 
@@ -147,7 +172,7 @@ Note no batchdim here because 1D so any direction is used
             # Evaluate g at trial point (mask converged lanes to avoid stale calls)
             @. u       = x + d
             @. u       = ifelse(converged, x, u)   # u_eval in-place
-            g!(y, u, params...)
+            g!(y, u)
             @. y      = ifelse(converged, gx, y)  # mask converged result
 
             # ── Update bracket (gate on !converged) ──────────────────────────
@@ -156,6 +181,7 @@ Note no batchdim here because 1D so any direction is used
             #   gu≤gx, u<x  → xa=u;  gu≤gx, u>=x → xb=u
             # XOR truth table verifies: update_a = (u<x) ⊻ (y>gx)
             # is_best reused as gu_best; x_right reused as u_lt_x then update_a
+            # Here we actually do minimization tho:
             @. is_best = y < gx
             @. d_para  = ifelse(is_best, x, u)      # bound (reuse d_para, done above)
             @. x_right = (u < x) ⊻ is_best          # update_a
@@ -170,13 +196,13 @@ Note no batchdim here because 1D so any direction is used
             @. x   = ifelse(converged, x,  ifelse(is_best, u,  x))
             @. gx  = ifelse(converged, gx, ifelse(is_best, y, gx))
 
-            @. is_2nd = !is_best & ((y >= gw) | (w == x))
+            @. is_2nd = @. is_2nd = !is_best & ((y <= gw) | (w == x)) # !is_best & ((y >= gw) | (w == x))
             @. v   = ifelse(converged, v,  ifelse(is_2nd, w,  v))
             @. gv  = ifelse(converged, gv, ifelse(is_2nd, gw, gv))
             @. w   = ifelse(converged, w,  ifelse(is_2nd, u,  w))
             @. gw  = ifelse(converged, gw, ifelse(is_2nd, y, gw))
 
-            @. is_3rd = !is_best & !is_2nd & ((y >= gv) | (v == x) | (v == w))
+            @. is_3rd = @. is_3rd = !is_best & !is_2nd & ((y <= gv) | (v == x) | (v == w)) #!is_best & !is_2nd & ((y >= gv) | (v == x) | (v == w))
             @. v   = ifelse(converged, v,  ifelse(is_3rd, u,  v))
             @. gv  = ifelse(converged, gv, ifelse(is_3rd, y, gv))
 
