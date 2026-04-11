@@ -72,9 +72,9 @@ p = rand(20000)
 sol = newton(g, x0, Constant(p))
 ```
 
-The problem with this approach is that now instead of solving many small 2x2 systems, the linear algebra solver needs to solve a giant 20000 x 20000 matrix equation. This will generally be much slower than just solving many small systems. In fact, we tested this approach with CUDA's CUSPARSE solver, and unfortunately we found performance to scale poorly beyond 60000 x 60000 systems. 
+The problem with this approach is that now instead of solving many small 2x2 systems, the linear algebra solver needs to solve a giant 20000 x 20000 matrix equation. This will generally be much slower than just solving many small systems. In fact, we tested this approach with CUDA's cuSPARSE solver, and unfortunately we found performance to scale poorly beyond 60000 x 60000 systems. 
 
-For CUDA arrays, `BatchSolve.jl` plugs directly into CUDA's CUBLAS library which provides GPU-accelerated batched linear system solving.
+For CUDA arrays, `BatchSolve.jl` plugs directly into CUDA's cuBLAS library which provides GPU-accelerated batched linear system solving.
 
 Currently implemented batched solvers include:
 
@@ -96,7 +96,7 @@ This package also features an experimental AD backend `AutoVecFD`, which acceler
 
 ## Should you NOT use this package?
 
-This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose for their problem in order to get reasonable results. This is quite different from the polyalgorithm approaches in other packages, e.g. [`BlackBoxOptim.jl`](https://github.com/SciML/BlackBoxOptim.jl), which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all `BatchSolve.jl` will tell you is that it failed (and give you the last Jacobian if derivatives are used). This package also lacks many features in comparison to e.g. [`NonlinearSolve.jl`](https://docs.sciml.ai/NonlinearSolve/stable/), like bounds, trust regions, etc. It is very barebones in comparison, but will get the job done fast and correctly if your problem is well-paired with the selected solver.
+This package is geared towards lightweight but high performance batched solvers, and requires the user to have some knowledge of the appropriate solver to choose for their problem in order to get reasonable results. This is quite different from the polyalgorithm approaches in other packages, e.g. [`BlackBoxOptim.jl`](https://github.com/SciML/BlackBoxOptim.jl), which is generally better for cases where you just want to "press go" and get a solution, even for hard problems. Furthermore, in cases where a solution doesn't converge or blows up, all `BatchSolve.jl` will tell you is that it failed (and give you the last Jacobian if derivatives are used). This package also lacks many features in comparison to e.g. [`NonlinearSolve.jl`](https://docs.sciml.ai/NonlinearSolve/stable/). It is very barebones in comparison, but will get the job done fast and correctly if your problem is well-paired with the selected solver.
 
 ## Acknowledgements
 
