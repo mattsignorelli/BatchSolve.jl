@@ -1,7 +1,7 @@
 name = "BatchSolve"
 uuid = "87e15b6a-8d99-4cf4-8ad5-fed92cf0c427"
-authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
 version = "0.1.0"
+authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -25,6 +25,7 @@ BatchSolveCUDAExt = "CUDA"
 BatchSolveGPUArraysCoreExt = ["GPUArraysCore", "DifferentiationInterface", "LinearAlgebra"]
 
 [compat]
+ArrayInterface = "7"
 CUDA = "5.9"
 DifferentiationInterface = "0.7.4"
 ForwardDiff = "0.10,1"
