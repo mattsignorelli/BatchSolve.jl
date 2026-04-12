@@ -5,7 +5,14 @@
 [![Build Status](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/mattsignorelli/BatchSolve.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mattsignorelli/BatchSolve.jl)
 
-Do you have a (GPU) vectorized residual/merit function that you want to solve? Do you want to solve it using automatic differentiation for 100,000 different parameter configurations in parallel? Or is your problem not autodifferentiable, and you're looking for a SIMD-friendly finite differences method? Something lightweight, easily precompileable, and supporting a mutable interface? Perhaps plugging directly into CUDA's CUBLAS library for batched linear solving? Look no further!
+Are you looking for...
+
+- Solvers for (GPU) vectorized residual/merit functions that are compatible with automatic differentiation?
+- A vectorized and batchable finite differences method?
+- A lightweight package with a mutable interface?
+- Solvers that directly plug into CUDA's cuBLAS library for batched linear solving?
+
+Look no further!
 
 `BatchSolve.jl` aims to provide various functionalities for solving batch-able, vectorized residual functions (for root finding) and objective functions (for minimizing). As long as your function is vectorized, then `BatchSolve.jl` will take care of the rest! 
 
@@ -37,7 +44,7 @@ sol = newton(f_vectorized, zeros(10000), Constant(1:10000), batchdim=1, autodiff
 ```
 
 The returned object is a `NamedTuple` with the fields:
-- `u`: an array of size equal to the input array, containing the inputs at the roots
+- `u`: an array with size equal to the input array, containing the inputs at the roots
 - `jac`: a (sparse) matrix storing the Jacobian for the entire batched-system at the last iteration
 - `retcode`: an array of return codes for each element in the batch, where `0x0` is success, `0x1` is failure, and `0x2` means the maximum number of iterations was reached
 - `iters`: an array storing the number of iterations until convergence for each element in the batch

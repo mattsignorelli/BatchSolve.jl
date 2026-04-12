@@ -7,6 +7,7 @@ using Reexport
 using Accessors,
     ADTypes,
     ArrayInterface,
+    EnumX,
     ForwardDiff,
     LinearAlgebra,
     StaticArrays,
@@ -21,6 +22,7 @@ const RETCODE_SUCCESS = 0x0
 const RETCODE_FAILURE = 0x1
 const RETCODE_MAXITER = 0x2
 
+include("autobatch.jl")
 include("rootfinders/newton.jl")
 include("minimizers/brent.jl")
 
