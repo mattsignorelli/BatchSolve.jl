@@ -162,7 +162,7 @@ function newton!(
       @warn "You provided `retcode`, but this is only used for batched-Newton. Non-batched Newton 
              always returns a scalar `retcode`."
     end
-    out = merge(out, (; retcode=RETCODE_MAXITERS, iters=0))
+    out = merge(out, (; retcode=RETCODE_MAXITER, iters=0))
     # Newton:
     dx .= 0
     for iter in 1:maxiter
@@ -190,7 +190,7 @@ function newton!(
     otherdim = mod(batchdim, 2)+1
     abstol2 = abstol^2
     reltol2 = reltol^2
-    fill!(retcode, RETCODE_MAXITERS)
+    fill!(retcode, RETCODE_MAXITER)
     fill!(iters, -1)
     out = merge(out, (; retcode=retcode, iters=iters))
     # Newton:
@@ -210,8 +210,8 @@ function newton!(
         iter,
         out.iters
       )
-      out.retcode .= ifelse.(out.iters .!= -1 .&& out.retcode .== RETCODE_MAXITERS, RETCODE_SUCCESS, out.retcode)
-      if all(out.retcode .!= RETCODE_MAXITERS)
+      out.retcode .= ifelse.(out.iters .!= -1 .&& out.retcode .== RETCODE_MAXITER, RETCODE_SUCCESS, out.retcode)
+      if all(out.retcode .!= RETCODE_MAXITER)
         break
       end
     end

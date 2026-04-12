@@ -67,7 +67,7 @@ sol = newton(g, x0, Constant(p), batchdim=2)
 Of course, you could just treat this batch all together as one vector of size 20000 (number of elements in the "batch" equal to one). This can be done by not setting `batchdim`, which basically gives a regular non-batched Newton solver:
 
 ```julia
-x0 = zeros(20000) #
+x0 = zeros(20000)
 p = rand(20000)
 sol = newton(g, x0, Constant(p))
 ```

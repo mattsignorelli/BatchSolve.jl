@@ -11,15 +11,10 @@ Interface: newton!(f!, y, x; kwargs...)
   ~1e-8 for Float64 in practice, not 1e-12.
 """
 
-using Test
 using Random
-using LinearAlgebra
 using SparseArrays
 using BatchSolve
-
-const SUCCESS  = BatchSolve.RETCODE_SUCCESS
-const FAILURE  = BatchSolve.RETCODE_FAILURE
-const MAXITERS = BatchSolve.RETCODE_MAXITERS
+import BatchSolve: RETCODE_SUCCESS, RETCODE_FAILURE, RETCODE_MAXITER
 
 # ===========================================================================
 # 1-18: Scalar (non-batched)
@@ -28,7 +23,7 @@ const MAXITERS = BatchSolve.RETCODE_MAXITERS
 @testset "1. Linear f(x)=x-c" begin
     y = [0.0]; x = [0.0]; y[1] = x[1] - 3.7
     sol = newton!((y,x)->(y[1]=x[1]-3.7), y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ 3.7
 end
 
@@ -36,7 +31,7 @@ end
     f!(y,x) = (y[1] = x[1]^2 - 2.0)
     x = [1.0]; y = [x[1]^2 - 2.0]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ sqrt(2.0)
     @test sol.u[1] > 0
 end
@@ -45,7 +40,7 @@ end
     f!(y,x) = (y[1] = sin(x[1]))
     x = [3.0]; y = [sin(3.0)]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ π
 end
 
@@ -53,7 +48,7 @@ end
     f!(y,x) = (y[1] = exp(x[1]) - 3.0)
     x = [1.0]; y = [exp(1.0) - 3.0]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ log(3.0)
 end
 
@@ -77,7 +72,7 @@ end
     f!(y,x) = (y .= A * x .- b)
     x = [0.0; 0.0]; y = A*x .- b
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u ≈ A \ b
 end
 
@@ -86,7 +81,7 @@ end
     f!(y,x) = (y .= A * x .- b)
     x = zeros(3); y = A*x .- b
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u ≈ A \ b
 end
 
@@ -94,14 +89,14 @@ end
     f!(y,x) = (y[1] = x[1]^2 + x[2]^2 - 1; y[2] = x[1] - x[2])
     x = [0.6; 0.6]; y = zeros(2); f!(y, x)
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u ≈ fill(1/sqrt(2), 2)
 end
 
-@testset "10. retcode == SUCCESS on convergence" begin
+@testset "10. retcode == RETCODE_SUCCESS on convergence" begin
     f!(y,x) = (y[1] = x[1] - 1.0)
     x = [0.0]; y = [-1.0]
-    @test newton!(f!, y, x).retcode == SUCCESS
+    @test newton!(f!, y, x).retcode == RETCODE_SUCCESS
 end
 
 @testset "11. retcode valid UInt8 with maxiter=1" begin
@@ -109,13 +104,13 @@ end
     x = [100.0]; y = [x[1]^2 - 2.0]
     sol = newton!(f!, y, x; maxiter=1)
     @test sol.retcode isa UInt8
-    @test sol.retcode in (SUCCESS, MAXITERS)
+    @test sol.retcode in (RETCODE_SUCCESS, RETCODE_MAXITER)
 end
 
-@testset "12. retcode == FAILURE on singular Jacobian" begin
+@testset "12. retcode == RETCODE_FAILURE on singular Jacobian" begin
     f!(y,x) = (y[1] = x[1]^2)
     x = [0.0]; y = [0.0]
-    @test newton!(f!, y, x).retcode == FAILURE
+    @test newton!(f!, y, x).retcode == RETCODE_FAILURE
 end
 
 @testset "13. iters is non-negative integer" begin
@@ -130,7 +125,7 @@ end
     f!(y,x) = (y[1] = cos(x[1]) - 0.5)
     x = [1.0]; y = [cos(1.0) - 0.5]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test cos(sol.u[1]) ≈ 0.5
 end
 
@@ -154,8 +149,8 @@ end
     xl = [1.0]; yl = [xl[1]^3 - 2.0]
     tight = newton!(f!, yt, xt; abstol=1e-12)
     loose = newton!(f!, yl, xl; abstol=1e-2)
-    @test tight.retcode == SUCCESS
-    @test loose.retcode == SUCCESS
+    @test tight.retcode == RETCODE_SUCCESS
+    @test loose.retcode == RETCODE_SUCCESS
     @test loose.iters <= tight.iters
     @test tight.u[1] ≈ 2^(1/3)
 end
@@ -165,7 +160,7 @@ end
     x = Float32[0.0]; y = Float32[-1.5]
     sol = newton!(f!, y, x)
     @test eltype(sol.u) == Float32
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ 1.5f0
 end
 
@@ -173,7 +168,7 @@ end
     f!(y,x) = (y[1] = x[1] - Float64(π))
     x = [0.0]; y = [-Float64(π)]
     sol = newton!(f!, y, x; reltol=1e-14)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ π
 end
 
@@ -187,7 +182,7 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(10); y = x .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs
 end
 
@@ -196,7 +191,7 @@ end
     f!(y,x) = (y .= x.^2 .- ps)
     x = ones(20); y = x.^2 .- ps
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ sqrt.(ps)
 end
 
@@ -205,7 +200,7 @@ end
     f!(y,x) = (y .= sin.(x) .- cs)
     x = asin.(cs) .+ 0.1; y = sin.(x) .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sin.(sol.u) ≈ cs
 end
 
@@ -214,7 +209,7 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(1000); y = x .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs
 end
 
@@ -223,7 +218,7 @@ end
     f!(y,x) = (y[:,1] .= 2 .* x[:,1] .- P[:,1]; y[:,2] .= 3 .* x[:,2] .- P[:,2])
     x = zeros(50, 2); y = similar(x); f!(y, x)
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u[:,1] ≈ P[:,1] ./ 2
     @test sol.u[:,2] ≈ P[:,2] ./ 3
 end
@@ -233,7 +228,7 @@ end
     f!(y,x) = (y .= x.^3 .- cs)
     x = ones(20); y = x.^3 .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs.^(1/3)
 end
 
@@ -246,7 +241,7 @@ end
     @test size(sol.retcode) == (15, 1)
     @test size(sol.iters)   == (15, 1)
     @test eltype(sol.retcode) == UInt8
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test all(sol.iters .>= 0)
 end
 
@@ -258,7 +253,7 @@ end
     sol = newton!(f!, y, x; batchdim=1)
     @test size(sol.retcode) == (10, 1)
     @test size(sol.iters)   == (10, 1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
 end
 
 @testset "27. Each lane matches its root, batchdim=1" begin
@@ -266,20 +261,20 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(5); y = x .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs
 end
 
-@testset "28. Singular J lanes → FAILURE, good lanes → SUCCESS, batchdim=1" begin
+@testset "28. Singular J lanes → RETCODE_FAILURE, good lanes → RETCODE_SUCCESS, batchdim=1" begin
     cs = [0.0, 1.0, 0.0, 1.0]
     x0 = [0.0, 1.0, 0.0, 1.0]
     f!(y,x) = (y .= x.^2 .- cs)
     y = x0.^2 .- cs
     sol = newton!(f!, y, copy(x0); batchdim=1)
-    @test sol.retcode[1] == FAILURE
-    @test sol.retcode[3] == FAILURE
-    @test sol.retcode[2] == SUCCESS
-    @test sol.retcode[4] == SUCCESS
+    @test sol.retcode[1] == RETCODE_FAILURE
+    @test sol.retcode[3] == RETCODE_FAILURE
+    @test sol.retcode[2] == RETCODE_SUCCESS
+    @test sol.retcode[4] == RETCODE_SUCCESS
 end
 
 @testset "29. All u values in expected range, batchdim=1" begin
@@ -287,7 +282,7 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(100); y = x .- cs
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test all(sol.u .>= 0.0)
     @test all(sol.u .<= 2.0)
 end
@@ -315,7 +310,7 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(1, 10); y = x .- cs
     sol = newton!(f!, y, x; batchdim=2)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test vec(sol.u) ≈ vec(cs)
 end
 
@@ -324,7 +319,7 @@ end
     f!(y,x) = (y .= x .- cs)
     x = zeros(1, 1000); y = x .- cs
     sol = newton!(f!, y, x; batchdim=2)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs
 end
 
@@ -333,7 +328,7 @@ end
     f!(y,x) = (y[1,:] .= 2 .* x[1,:] .- P[1,:]; y[2,:] .= 3 .* x[2,:] .- P[2,:])
     x = zeros(2, 50); y = similar(x); f!(y, x)
     sol = newton!(f!, y, x; batchdim=2)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u[1,:] ≈ P[1,:] ./ 2
     @test sol.u[2,:] ≈ P[2,:] ./ 3
 end
@@ -346,7 +341,7 @@ end
     sol = newton!(f!, y, x; batchdim=2)
     @test size(sol.retcode) == (1, 30)
     @test size(sol.iters)   == (1, 30)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test all(sol.iters .>= 0)
 end
 
@@ -371,7 +366,7 @@ end
     f!(y,x) = (y[1] = x[1] - 1.0)
     x = [1.0]; y = [0.0]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ 1.0
     @test sol.iters <= 1
 end
@@ -388,7 +383,7 @@ end
     f!(y,x) = (y[1] = x[1] - sqrt(2.0))
     x = [1.0]; y = [1.0 - sqrt(2.0)]
     sol = newton!(f!, y, x; abstol=1e-14)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ sqrt(2.0)
 end
 
@@ -398,8 +393,8 @@ end
     xl = [3.0]; yl = [sin(3.0)]
     tight = newton!(f!, yt, xt; abstol=1e-14)
     loose = newton!(f!, yl, xl; abstol=1e-2)
-    @test tight.retcode == SUCCESS
-    @test loose.retcode == SUCCESS
+    @test tight.retcode == RETCODE_SUCCESS
+    @test loose.retcode == RETCODE_SUCCESS
     @test loose.iters <= tight.iters
 end
 
@@ -425,7 +420,7 @@ end
     f!(y,x) = (y[1] = x[1]^3 - 5.0)
     x = [1.5]; y = [x[1]^3 - 5.0]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1]^3 ≈ 5.0
 end
 
@@ -439,7 +434,7 @@ end
         xi = [1.0]; yi = [xi[1]^3 - cs[i]]
         newton!(fi!, yi, xi).u[1]
     end
-    @test all(sol_batch.retcode .== SUCCESS)
+    @test all(sol_batch.retcode .== RETCODE_SUCCESS)
     @test sol_batch.u ≈ roots_serial
 end
 
@@ -448,16 +443,16 @@ end
     f!(y,x) = (y .= x .- cs)
     x = copy(cs); y = x .- cs   # y = 0 everywhere
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test all(sol.iters .<= 1)
 end
 
-@testset "45. maxiter=1 from far start → not SUCCESS, batchdim=1" begin
+@testset "45. maxiter=1 from far start → not RETCODE_SUCCESS, batchdim=1" begin
     cs = zeros(5)
     f!(y,x) = (y .= x.^3 .- cs)
     x = fill(1e6, 5); y = x.^3 .- cs
     sol = newton!(f!, y, x; batchdim=1, maxiter=1)
-    @test all(sol.retcode .!= SUCCESS)
+    @test all(sol.retcode .!= RETCODE_SUCCESS)
 end
 
 # ===========================================================================
@@ -521,7 +516,7 @@ end
     vj!(y, J, x) = (y[1] = x[1] - 3.0; J[1,1] = 1.0)
     y = [0.0]; J = zeros(1,1); x = [0.0]
     sol = newton!(vj!, y, J, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.u[1] ≈ 3.0
 end
 
@@ -539,7 +534,7 @@ end
     x = zeros(Float32, 10); y = x .- cs
     sol = newton!(f!, y, x; batchdim=1)
     @test eltype(sol.u) == Float32
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     @test sol.u ≈ cs
 end
 
@@ -548,7 +543,7 @@ end
     f!(y,x) = (y[:,1] .= 2.0 .* x[:,1] .- P[:,1]; y[:,2] .= 3.0 .* x[:,2] .- P[:,2])
     x = zeros(100, 2); y = similar(x); f!(y, x)
     sol = newton!(f!, y, x; batchdim=1)
-    @test all(sol.retcode .== SUCCESS)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
     res = similar(sol.u); f!(res, sol.u)
     @test maximum(abs.(res)) < 1e-8
 end
@@ -557,7 +552,7 @@ end
     f!(y,x) = (y[1] = x[1]^5 - 3.0)
     x = [1.5]; y = [x[1]^5 - 3.0]
     sol = newton!(f!, y, x)
-    @test sol.retcode == SUCCESS
+    @test sol.retcode == RETCODE_SUCCESS
     @test sol.iters < 15
     @test sol.u[1] ≈ 3.0^(1/5)
 end
