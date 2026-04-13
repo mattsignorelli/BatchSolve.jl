@@ -7,7 +7,7 @@
 # will be block diagonal if batchdim=2 (bc then input is AoS style), 
 # else it will have bands of diagonals if batchdim=1 (bc input is SoA).
 # In either case, the sparse Jacobian layout is what would multiply x if
-# x = reshape(x, :)  (treat x as a vector)
+# x = reshape(x, :)  (treat x as a vector).
 
 @enumx VecFDMode Forward Central Reverse
 

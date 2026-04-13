@@ -129,7 +129,7 @@ function newton!(
     @reset out.iters=maxiter
     return out
   else
-    otherdim = mod(batchdim, 2)+1
+    otherdim = mod(batchdim, 2) + 1
     abstol2 = abstol^2
     reltol2 = reltol^2
     fill!(retcode, RETCODE_MAXITER)
