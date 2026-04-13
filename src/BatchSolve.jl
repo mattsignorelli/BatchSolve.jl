@@ -2,6 +2,7 @@ module BatchSolve
 import DifferentiationInterface as DI
 using DifferentiationInterface: Constant, Cache, ConstantOrCache, Context
 using FiniteDiff: default_relstep, compute_epsilon
+using ADTypes: dense_ad
 import KernelAbstractions as KA
 using Reexport
 @reexport using ADTypes
@@ -26,6 +27,7 @@ const RETCODE_MAXITER = 0x2
 
 include("batch-ad/utils.jl")
 include("batch-ad/autobatch.jl")
+include("batch-ad/finitediff.jl")
 include("rootfinders/newton.jl")
 include("minimizers/brent.jl")
 

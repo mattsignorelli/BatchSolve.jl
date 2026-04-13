@@ -36,6 +36,10 @@ function _prepare_batch_jacobian_aux(
     contexts::Vararg{DI.Context, C}
   ) where {FY, C}
   batchdim = backend.batchdim
+  batchsize = size(x, batchdim)
+  otherdim = mod(batchdim, 2) + 1
+  n_cols = size(x, otherdim)
+  otherdim = mod(batchdim, 2) + 1
   pattern = make_pattern(x, y, batchdim)
   color = (batchdim == 1) ? repeat(1:n_cols, inner=batchsize) : repeat(1:n_cols, outer=batchsize) 
   alg = ConstantColoringAlgorithm(pattern, color; partition=:column)
