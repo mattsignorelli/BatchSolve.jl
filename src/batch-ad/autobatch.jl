@@ -18,7 +18,7 @@ function DI.prepare_jacobian_nokwarg(
     strict::Val, f::F, backend::AutoBatch, x, contexts::Vararg{DI.Context, C}
   ) where {F, C}
   y = f(x, map(DI.unwrap, contexts)...)
-  return _prepare_batch_jacobian_aux(strict, y, f, backend, x, contexts...)
+  return _prepare_batch_jacobian_aux(strict, y, (f,), backend, x, contexts...)
 end
 
 function DI.prepare_jacobian_nokwarg(
