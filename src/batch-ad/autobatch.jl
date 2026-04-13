@@ -18,7 +18,7 @@ function DI.prepare_jacobian_nokwarg(
     strict::Val, f::F, backend::AutoBatch, x, contexts::Vararg{DI.Context, C}
   ) where {F, C}
   y = f(x, map(DI.unwrap, contexts)...)
-  return _prepare_batch_jacobian_aux(strict, y, f, backend, x, contexts...)
+  return _prepare_batch_jacobian_aux(strict, y, (f,), backend, x, contexts...)
 end
 
 function DI.prepare_jacobian_nokwarg(
@@ -36,10 +36,12 @@ function _prepare_batch_jacobian_aux(
     contexts::Vararg{DI.Context, C}
   ) where {FY, C}
   batchdim = backend.batchdim
+  batchsize = size(x, batchdim)
+  otherdim = mod(batchdim, 2) + 1
+  n_cols = size(x, otherdim)
   pattern = make_pattern(x, y, batchdim)
   color = (batchdim == 1) ? repeat(1:n_cols, inner=batchsize) : repeat(1:n_cols, outer=batchsize) 
   alg = ConstantColoringAlgorithm(pattern, color; partition=:column)
-
   detector = ADTypes.KnownJacobianSparsityDetector(pattern)
   sparse_ad = AutoSparse(dense_ad(backend); 
     sparsity_detector=detector,
