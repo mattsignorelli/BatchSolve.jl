@@ -39,11 +39,9 @@ function _prepare_batch_jacobian_aux(
   batchsize = size(x, batchdim)
   otherdim = mod(batchdim, 2) + 1
   n_cols = size(x, otherdim)
-  otherdim = mod(batchdim, 2) + 1
   pattern = make_pattern(x, y, batchdim)
   color = (batchdim == 1) ? repeat(1:n_cols, inner=batchsize) : repeat(1:n_cols, outer=batchsize) 
   alg = ConstantColoringAlgorithm(pattern, color; partition=:column)
-
   detector = ADTypes.KnownJacobianSparsityDetector(pattern)
   sparse_ad = AutoSparse(dense_ad(backend); 
     sparsity_detector=detector,
