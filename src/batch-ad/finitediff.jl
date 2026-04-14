@@ -166,7 +166,7 @@ function set_batch_fdj_input!(x, prep::BatchFiniteDiffJacobianPrep, backend::Aut
 end
 
 function compute_batch_fdj_jac!(
-    jac::SparseArrays.AbstractSparseMatrixCSC,
+    jac,
     prep::BatchFiniteDiffJacobianPrep,
     backend::AutoBatch{<:AutoFiniteDiff},
   )
