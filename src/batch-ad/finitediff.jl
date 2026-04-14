@@ -80,7 +80,7 @@ function _prepare_batch_jacobian_aux(
   end
 
    _sig = DI.signature(f_or_f!y..., backend, x, contexts...; strict)
-  return BatchFiniteDiffJacobianPrep(_sig, batchdim, nx, ny, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache)
+  return BatchFiniteDiffJacobianPrep(_sig, batchdim, ny, nx, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache)
 end
 
 # Jacobian:
@@ -118,7 +118,7 @@ function _value_and_jacobian_aux!(
     # Allocate result:
     batchdim = prep.batchdim
     otherdim = mod(batchdim, 2) + 1
-    y = prep.y1[ntuple(i -> i == batchdim ? size(x, batchdim) : 1:size(prep.y1, otherdim), Val{2}())...]
+    y = prep.y1[ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...]
   else
     f! = f_or_f!y[1]
     y = f_or_f!y[2]
@@ -204,39 +204,34 @@ function compute_batch_fdj_jac!(
     #   Rows nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
     #   Rows nlanes*(nx+1)+1 : nlanes*(2*nx+1) - rwd-perturbed (central only)
     #
-    # reshape fwd block (nlanes*nx, ny) -> (nlanes, nx, ny) col-major:
-    #   fwd_3d[lane, var, out] = f(x + eps*e_var)[lane, out]
+    # fwd_3d[lane, var, out] = f(x + eps*e_var)[lane, out]  — (nlanes, nx, ny)
     #
-    # CSC columns for batchdim=1 (banded Jacobian):
-    #   col j (0-indexed)  <->  var = j ÷ nlanes,  lane = j % nlanes
-    #   nzval = vec(permutedims(tang, (3,1,2)))
-    #         = vec of (ny, nlanes, nx) array col-major
+    # CSC layout for batchdim=1 (banded Jacobian):
+    #   nzval reshaped to (ny, nlanes, nx) in col-major order, i.e.
+    #   nzval_3d[out, lane, var] = J[lane,var,out]
     #
-    # Strategy:
-    #   1. Compute tang via broadcasting   (1 allocation, size nlanes*nx*ny)
-    #   2. permutedims!(nzval_3d, tang, (3,1,2))   (GPU kernel, writes into nzval)
+    # Strategy: wrap nzval_3d as PermutedDimsArray{(2,3,1)} to expose it with
+    #   the same (lane, var, out) index order as fwd_3d, then @. broadcast
+    #   the difference quotient directly in — zero allocations, single GPU kernel.
     # ------------------------------------------------------------------
 
-    fwd_3d   = reshape(@view(y1[(nlanes + 1):(nlanes*(nx + 1)), :]),
-                       nlanes, nx, ny)           # (lane, var, out) — no-copy reshape
-    primal_3d = reshape(@view(y1[1:nlanes, :]),
-                        nlanes, 1, ny)           # (lane, 1, out)  — broadcast-ready
-    eps_3d   = reshape(@view(epsilon[:, 1]),
-                       nlanes, 1, 1)             # (lane, 1, 1)    — broadcast-ready
+    fwd_3d    = reshape(@view(y1[(nlanes + 1):(nlanes*(nx + 1)), :]),
+                        nlanes, nx, ny)          # (lane, var, out) — no-copy reshape
+    eps_3d    = reshape(@view(epsilon[:, 1]),
+                        nlanes, 1, 1)            # (lane, 1, 1)    — broadcast-ready
 
-    tang = if mode == Val{:central}
+    nzval_3d   = reshape(nzval, ny, nlanes, nx)
+    nzval_perm = PermutedDimsArray(nzval_3d, (2, 3, 1))  # view as (lane, var, out), no alloc
+
+    if mode == Val{:central}
       rwd_3d = reshape(@view(y1[(nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1)), :]),
                        nlanes, nx, ny)
-      (fwd_3d .- rwd_3d) ./ (2 .* eps_3d)
+      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
-      (fwd_3d .- primal_3d) ./ eps_3d
+      primal_3d = reshape(@view(y1[1:nlanes, :]),
+                          nlanes, 1, ny)         # (lane, 1, out) — broadcast-ready
+      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
     end
-
-    # Reshape nzval into (ny, nlanes, nx) — a no-copy view into the same memory.
-    # permutedims!(dest, src, (3,1,2)) writes tang[lane,var,out] -> dest[out,lane,var],
-    # which is exactly the col-major column-by-column CSC layout for batchdim=1.
-    nzval_3d = reshape(nzval, ny, nlanes, nx)
-    permutedims!(nzval_3d, tang, (3, 1, 2))
 
   else  # batchdim == 2
     # ------------------------------------------------------------------
@@ -246,36 +241,33 @@ function compute_batch_fdj_jac!(
     #   Cols nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
     #   Cols nlanes*(nx+1)+1 : nlanes*(2*nx+1) - rwd-perturbed (central only)
     #
-    # reshape fwd block (ny, nlanes*nx) -> (ny, nlanes, nx) col-major:
-    #   fwd_3d[out, lane, var] = f(x + eps*e_var)[out, lane]
+    # fwd_3d[out, lane, var] = f(x + eps*e_var)[out, lane]  — (ny, nlanes, nx)
     #
-    # CSC columns for batchdim=2 (block-diagonal Jacobian):
-    #   col j (0-indexed)  <->  lane = j ÷ nx,  var = j % nx
-    #   nzval = vec(permutedims(tang, (1,3,2)))
-    #         = vec of (ny, nx, nlanes) array col-major
+    # CSC layout for batchdim=2 (block-diagonal Jacobian):
+    #   nzval reshaped to (ny, nx, nlanes) in col-major order, i.e.
+    #   nzval_3d[out, var, lane] = J[out,var,lane]
     #
-    # Strategy: same as batchdim=1, different permutation and reshape target.
+    # Strategy: same zero-alloc approach, wrap nzval_3d as PermutedDimsArray{(1,3,2)}
+    #   to expose it as (out, lane, var) matching fwd_3d.
     # ------------------------------------------------------------------
 
     fwd_3d    = reshape(@view(y1[:, (nlanes + 1):(nlanes*(nx + 1))]),
                         ny, nlanes, nx)          # (out, lane, var) — no-copy reshape
-    primal_3d = reshape(@view(y1[:, 1:nlanes]),
-                        ny, nlanes, 1)           # (out, lane, 1)   — broadcast-ready
     eps_3d    = reshape(@view(epsilon[1, :]),
                         1, nlanes, 1)            # (1, lane, 1)     — broadcast-ready
 
-    tang = if mode == Val{:central}
+    nzval_3d   = reshape(nzval, ny, nx, nlanes)
+    nzval_perm = PermutedDimsArray(nzval_3d, (1, 3, 2))  # view as (out, lane, var), no alloc
+
+    if mode == Val{:central}
       rwd_3d = reshape(@view(y1[:, (nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1))]),
                        ny, nlanes, nx)
-      (fwd_3d .- rwd_3d) ./ (2 .* eps_3d)
+      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
-      (fwd_3d .- primal_3d) ./ eps_3d
+      primal_3d = reshape(@view(y1[:, 1:nlanes]),
+                          ny, nlanes, 1)         # (out, lane, 1)  — broadcast-ready
+      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
     end
-
-    # permutedims!(dest, src, (1,3,2)) writes tang[out,lane,var] -> dest[out,var,lane],
-    # which is exactly the col-major column-by-column CSC layout for batchdim=2.
-    nzval_3d = reshape(nzval, ny, nx, nlanes)
-    permutedims!(nzval_3d, tang, (1, 3, 2))
   end
 
   return jac
@@ -478,7 +470,7 @@ function DI.jacobian!(
   DI.check_prep(f!, y, prep, backend, x, contexts...)
   set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
 end
 
 function DI.jacobian(
@@ -488,7 +480,7 @@ function DI.jacobian(
   set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
 end
 
 function DI.value_and_jacobian(
