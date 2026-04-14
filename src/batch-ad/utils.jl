@@ -17,8 +17,6 @@ function make_pattern(
               size(y, $batchdim) = $(size(y, batchdim)).")
   end
 
-  otherdim = mod(batchdim, 2) + 1
-
   # Make it on the CPU
   nnz = batchsize * n_rows * n_cols
   rows = Vector{Int}(undef, nnz)
