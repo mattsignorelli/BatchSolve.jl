@@ -18,6 +18,7 @@ using Accessors,
     SparseMatrixColorings
 
 export Constant, Cache, ConstantOrCache, Context
+export AutoBatch
 export newton, newton!, brent, brent!
 
 # Wish I could use Enum but not GPU compatible.

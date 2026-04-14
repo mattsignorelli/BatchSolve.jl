@@ -1,4 +1,11 @@
-function make_pattern(x, y, batchdim)
+function make_pattern(
+  x, 
+  y, 
+  batchdim; 
+  n_rows=size(y, mod(batchdim, 2) + 1), 
+  n_cols=size(x, mod(batchdim, 2) + 1),
+  batchsize=size(x, batchdim),
+)
   if !(batchdim in (1,2))
     error("batchdim must be either 1 or 2")
   end
@@ -10,10 +17,7 @@ function make_pattern(x, y, batchdim)
               size(y, $batchdim) = $(size(y, batchdim)).")
   end
 
-  batchsize = size(x, batchdim)
   otherdim = mod(batchdim, 2) + 1
-  n_rows = size(y, otherdim)
-  n_cols = size(x, otherdim)
 
   # Make it on the CPU
   nnz = batchsize * n_rows * n_cols
@@ -39,6 +43,6 @@ function make_pattern(x, y, batchdim)
   copyto!(d_rows, rows)
   copyto!(d_cols, cols)
   d_mat .= 1
-
-  return sparse(d_rows, d_cols, d_mat, batchsize*n_rows, batchsize*n_cols)
+  pattern = sparse(d_rows, d_cols, d_mat, batchsize*n_rows, batchsize*n_cols)
+  return pattern
 end

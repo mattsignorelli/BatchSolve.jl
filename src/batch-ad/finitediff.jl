@@ -1,6 +1,9 @@
 struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG}
   _sig::Val{SIG}
   batchdim::Int
+  n_rows::Int
+  n_cols::Int
+  batchsize::Int
   x1::X
   y1::Y
   relstep::R
@@ -9,7 +12,9 @@ struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG
   contexts_cache::T
 end
 fdjtype(::AutoFiniteDiff{fdt, fdjt}) where {fdt, fdjt} = fdjt
-SparseMatrixColorings.sparsity_pattern(prep::BatchFiniteDiffJacobianPrep) = make_pattern(prep.x1, prep.y1, prep.batchdim)
+function SparseMatrixColorings.sparsity_pattern(prep::BatchFiniteDiffJacobianPrep)
+  return make_pattern(prep.x1, prep.y1, prep.batchdim; n_rows=prep.n_rows, n_cols=prep.n_cols, batchsize=prep.batchsize)
+end
 
 # Preparation:
 #=
@@ -41,11 +46,11 @@ function _prepare_batch_jacobian_aux(
   otherdim = mod(batchdim, 2) + 1
   nx = size(x, otherdim)
   ny = size(y, otherdim)
-  nlanes_prefd = size(x, batchdim)
-  nlanes_withfd = nlanes_prefd*(1 + nx*(mode == Val{:central} ? 2 : 1))
+  batchsize = size(x, batchdim)
+  nlanes_withfd = batchsize*(1 + nx*(mode == Val{:central} ? 2 : 1))
   x1 = similar(x, ntuple(i -> i == batchdim ? nlanes_withfd : nx, Val{2}()))
   y1 = similar(y, ntuple(i -> i == batchdim ? nlanes_withfd : ny, Val{2}()))
-  epsilon = similar(x, ntuple(i -> i == batchdim ? nlanes_prefd : 1, Val{2}()))
+  epsilon = similar(x, ntuple(i -> i == batchdim ? batchsize : 1, Val{2}()))
 
   relstep = if isnothing(dense_ad(backend).relstep)
     default_relstep(fdjtype(dense_ad(backend)), eltype(x))
@@ -63,7 +68,7 @@ function _prepare_batch_jacobian_aux(
   # Jacobian calculation uses type stable "iteration" over tuple
   contexts_cache = map(contexts) do c
     if DI.unwrap(c) isa AbstractArray # expand along batchdim
-      if size(DI.unwrap(c), batchdim) != nlanes_prefd
+      if size(DI.unwrap(c), batchdim) != batchsize
         error("AbstractArray Contexts for AutoBatch{<:AutoFiniteDiff} must have a size along batchdim equal 
                to the size along batchdim of the input array: received Context with size $(size(DI.unwrap(c), batchdim)) along batchdim.")
       end
@@ -75,7 +80,7 @@ function _prepare_batch_jacobian_aux(
   end
 
    _sig = DI.signature(f_or_f!y..., backend, x, contexts...; strict)
-  return BatchFiniteDiffJacobianPrep(_sig, batchdim, x1, y1, relstep, absstep, epsilon, contexts_cache)
+  return BatchFiniteDiffJacobianPrep(_sig, batchdim, nx, ny, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache)
 end
 
 # Jacobian:
@@ -106,7 +111,6 @@ end
 function _value_and_jacobian_aux!(
     f_or_f!y::FY, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x,
   ) where {FY}
-  @show prep.contexts_cache
   set_batch_fdj_input!(x, prep, backend)
   if length(f_or_f!y) == 1
     f = f_or_f!y[1]
@@ -121,8 +125,6 @@ function _value_and_jacobian_aux!(
     f!(prep.y1, prep.x1)
     y[:] .= view(prep.y1, 1:length(y))
   end
-  @show prep.x1
-  @show prep.y1
   compute_batch_fdj_jac!(jac, prep, backend)
   return y, jac
 end
@@ -176,45 +178,254 @@ function set_batch_fdj_input!(x, prep::BatchFiniteDiffJacobianPrep, backend::Aut
   return x1
 end
 
-function compute_batch_fdj_jac!(jac::SparseArrays.AbstractSparseMatrixCSC, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff})
-  x1 = prep.x1
-  y1 = prep.y1
+function compute_batch_fdj_jac!(
+    jac::SparseArrays.AbstractSparseMatrixCSC,
+    prep::BatchFiniteDiffJacobianPrep,
+    backend::AutoBatch{<:AutoFiniteDiff},
+  )
+  x1      = prep.x1
+  y1      = prep.y1
+  epsilon = prep.epsilon
 
   batchdim = prep.batchdim
   otherdim = mod(batchdim, 2) + 1
-  nx     = size(x1, otherdim)
-  ny     = size(y1, otherdim)
+  nx      = size(x1, otherdim)      # number of inputs per lane
+  ny      = size(y1, otherdim)      # number of outputs per lane
+  nlanes  = size(epsilon, batchdim) # == size(x, batchdim)
+
   mode   = fdjtype(dense_ad(backend))
-  nlanes = div(size(x1, batchdim), (mode == Val{:central} ? 2*nx + 1 : nx + 1))
+  nzval  = SparseArrays.nonzeros(jac)
 
   if batchdim == 1
-    fwd  = reshape(view(y1, (nlanes+1):nlanes*(nx+1),            :), nx, nlanes, ny)
-    eps3 = reshape(prep.epsilon, 1, nlanes, 1)
-    diff = if mode == Val{:central}
-      bwd = reshape(view(y1, (nlanes*(nx+1)+1):nlanes*(2nx+1),   :), nx, nlanes, ny)
-      (fwd .- bwd) ./ (2 .* eps3)                    # (nx, nlanes, ny)
-    else
-      y0 = reshape(view(y1, 1:nlanes, :), 1, nlanes, ny)
-      (fwd .- y0) ./ eps3
-    end
-    # CSC nzval layout for banded pattern: reshape(nzval, ny, nlanes, nx) = permutedims(diff, (3,2,1))
-    reshape(nonzeros(jac), ny, nlanes, nx) .= permutedims(diff, (3, 2, 1))
+    # ------------------------------------------------------------------
+    # y1 layout: shape (nlanes*(1 + k*nx), ny),  k=1 fwd / k=2 central
+    #
+    #   Rows 1:nlanes                          - primal outputs
+    #   Rows nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
+    #   Rows nlanes*(nx+1)+1 : nlanes*(2*nx+1) - rwd-perturbed (central only)
+    #
+    # reshape fwd block (nlanes*nx, ny) -> (nlanes, nx, ny) col-major:
+    #   fwd_3d[lane, var, out] = f(x + eps*e_var)[lane, out]
+    #
+    # CSC columns for batchdim=1 (banded Jacobian):
+    #   col j (0-indexed)  <->  var = j ÷ nlanes,  lane = j % nlanes
+    #   nzval = vec(permutedims(tang, (3,1,2)))
+    #         = vec of (ny, nlanes, nx) array col-major
+    #
+    # Strategy:
+    #   1. Compute tang via broadcasting   (1 allocation, size nlanes*nx*ny)
+    #   2. permutedims!(nzval_3d, tang, (3,1,2))   (GPU kernel, writes into nzval)
+    # ------------------------------------------------------------------
 
-  else  # batchdim=2, block diagonal
-    fwd  = reshape(view(y1, :, (nlanes+1):nlanes*(nx+1)),          ny, nx, nlanes)
-    eps3 = reshape(prep.epsilon, 1, 1, nlanes)
-    diff = if mode == Val{:central}
-      bwd = reshape(view(y1, :, (nlanes*(nx+1)+1):nlanes*(2nx+1)), ny, nx, nlanes)
-      (fwd .- bwd) ./ (2 .* eps3)                    # (ny, nx, nlanes)
-    else
-      y0 = reshape(view(y1, :, 1:nlanes), ny, 1, nlanes)
-      (fwd .- y0) ./ eps3
+    fwd_3d   = reshape(@view(y1[(nlanes + 1):(nlanes*(nx + 1)), :]),
+                       nlanes, nx, ny)           # (lane, var, out) — no-copy reshape
+    primal_3d = reshape(@view(y1[1:nlanes, :]),
+                        nlanes, 1, ny)           # (lane, 1, out)  — broadcast-ready
+    eps_3d   = reshape(@view(epsilon[:, 1]),
+                       nlanes, 1, 1)             # (lane, 1, 1)    — broadcast-ready
+
+    tang = if mode == Val{:central}
+      rwd_3d = reshape(@view(y1[(nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1)), :]),
+                       nlanes, nx, ny)
+      (fwd_3d .- rwd_3d) ./ (2 .* eps_3d)
+    else  # :forward
+      (fwd_3d .- primal_3d) ./ eps_3d
     end
-    # CSC nzval layout for block diagonal: reshape(nzval, ny, nx, nlanes) = diff directly
-    reshape(nonzeros(jac), ny, nx, nlanes) .= diff
+
+    # Reshape nzval into (ny, nlanes, nx) — a no-copy view into the same memory.
+    # permutedims!(dest, src, (3,1,2)) writes tang[lane,var,out] -> dest[out,lane,var],
+    # which is exactly the col-major column-by-column CSC layout for batchdim=1.
+    nzval_3d = reshape(nzval, ny, nlanes, nx)
+    permutedims!(nzval_3d, tang, (3, 1, 2))
+
+  else  # batchdim == 2
+    # ------------------------------------------------------------------
+    # y1 layout: shape (ny, nlanes*(1 + k*nx))
+    #
+    #   Cols 1:nlanes                          - primal outputs
+    #   Cols nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
+    #   Cols nlanes*(nx+1)+1 : nlanes*(2*nx+1) - rwd-perturbed (central only)
+    #
+    # reshape fwd block (ny, nlanes*nx) -> (ny, nlanes, nx) col-major:
+    #   fwd_3d[out, lane, var] = f(x + eps*e_var)[out, lane]
+    #
+    # CSC columns for batchdim=2 (block-diagonal Jacobian):
+    #   col j (0-indexed)  <->  lane = j ÷ nx,  var = j % nx
+    #   nzval = vec(permutedims(tang, (1,3,2)))
+    #         = vec of (ny, nx, nlanes) array col-major
+    #
+    # Strategy: same as batchdim=1, different permutation and reshape target.
+    # ------------------------------------------------------------------
+
+    fwd_3d    = reshape(@view(y1[:, (nlanes + 1):(nlanes*(nx + 1))]),
+                        ny, nlanes, nx)          # (out, lane, var) — no-copy reshape
+    primal_3d = reshape(@view(y1[:, 1:nlanes]),
+                        ny, nlanes, 1)           # (out, lane, 1)   — broadcast-ready
+    eps_3d    = reshape(@view(epsilon[1, :]),
+                        1, nlanes, 1)            # (1, lane, 1)     — broadcast-ready
+
+    tang = if mode == Val{:central}
+      rwd_3d = reshape(@view(y1[:, (nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1))]),
+                       ny, nlanes, nx)
+      (fwd_3d .- rwd_3d) ./ (2 .* eps_3d)
+    else  # :forward
+      (fwd_3d .- primal_3d) ./ eps_3d
+    end
+
+    # permutedims!(dest, src, (1,3,2)) writes tang[out,lane,var] -> dest[out,var,lane],
+    # which is exactly the col-major column-by-column CSC layout for batchdim=2.
+    nzval_3d = reshape(nzval, ny, nx, nlanes)
+    permutedims!(nzval_3d, tang, (1, 3, 2))
   end
+
   return jac
 end
+
+#=
+function compute_batch_fdj_jac!(
+    jac::SparseArrays.AbstractSparseMatrixCSC,
+    prep::BatchFiniteDiffJacobianPrep,
+    backend::AutoBatch{<:AutoFiniteDiff},
+  )
+  x1      = prep.x1
+  y1      = prep.y1
+  epsilon = prep.epsilon
+
+  batchdim = prep.batchdim
+  otherdim = mod(batchdim, 2) + 1
+  nx      = size(x1, otherdim)      # number of inputs per lane
+  ny      = size(y1, otherdim)      # number of outputs per lane
+  nlanes  = size(epsilon, batchdim) # == size(x, batchdim)
+
+  mode   = fdjtype(dense_ad(backend))
+  nzval  = SparseArrays.nonzeros(jac)
+  colptr = SparseArrays.getcolptr(jac)
+
+  if batchdim == 1
+    # ------------------------------------------------------------------
+    # y1 layout: shape (nlanes*(1 + k*nx), ny),  k=1 fwd / k=2 central
+    #
+    #   Rows 1:nlanes                          - primal outputs
+    #   Rows nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
+    #   Rows nlanes*(nx+1)+1 : nlanes*(2nx+1)  - rwd-perturbed (central only)
+    #
+    # Reshaping the fwd block (nlanes*nx, ny) to (nlanes, nx, ny) in Julia
+    # column-major order gives:
+    #   fwd_3d[lane, var, out] = f(x + eps*e_var)[lane, out]
+    #
+    # CSC column ordering for batchdim=1 (banded Jacobian):
+    #   col j (0-indexed)  <->  var = j div nlanes,  lane = j mod nlanes
+    #
+    # Each column j holds ny contiguous nzval entries:
+    #   nzval[colptr[j+1] : colptr[j+1]+ny-1] = tang[lane, var, :]
+    #
+    # This equals the col-major linearisation of permutedims(tang, (3,1,2))
+    # i.e. shape (ny, nlanes, nx), but we write it with a direct loop to
+    # avoid any temporary allocation.
+    # ------------------------------------------------------------------
+
+    fwd_flat = @view y1[(nlanes + 1):(nlanes*(nx + 1)), :]  # (nlanes*nx, ny)
+    fwd_3d   = reshape(fwd_flat, nlanes, nx, ny)             # (lane, var, out)
+
+    # epsilon has shape (nlanes, 1) for batchdim=1
+    eps_vec  = @view epsilon[:, 1]                           # length nlanes
+
+    if mode == Val{:central}
+      rwd_flat = @view y1[(nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1)), :]
+      rwd_3d   = reshape(rwd_flat, nlanes, nx, ny)
+
+      for var in 0:(nx - 1)
+        for lane in 0:(nlanes - 1)
+          j       = var * nlanes + lane    # 0-indexed CSC column
+          col_lo  = colptr[j + 1]         # 1-indexed start in nzval
+          two_eps = 2 * eps_vec[lane + 1]
+          for out in 1:ny
+            nzval[col_lo + out - 1] =
+              (fwd_3d[lane + 1, var + 1, out] - rwd_3d[lane + 1, var + 1, out]) / two_eps
+          end
+        end
+      end
+
+    else  # :forward
+      primal_mat = @view y1[1:nlanes, :]                    # (nlanes, ny)
+
+      for var in 0:(nx - 1)
+        for lane in 0:(nlanes - 1)
+          j      = var * nlanes + lane
+          col_lo = colptr[j + 1]
+          eps_lane = eps_vec[lane + 1]
+          for out in 1:ny
+            nzval[col_lo + out - 1] =
+              (fwd_3d[lane + 1, var + 1, out] - primal_mat[lane + 1, out]) / eps_lane
+          end
+        end
+      end
+    end
+
+  else  # batchdim == 2
+    # ------------------------------------------------------------------
+    # y1 layout: shape (ny, nlanes*(1 + k*nx))
+    #
+    #   Cols 1:nlanes                          - primal outputs
+    #   Cols nlanes+1 : nlanes*(nx+1)          - fwd-perturbed (all nx vars)
+    #   Cols nlanes*(nx+1)+1 : nlanes*(2nx+1)  - rwd-perturbed (central only)
+    #
+    # Reshaping the fwd block (ny, nlanes*nx) to (ny, nlanes, nx) in Julia
+    # column-major order gives:
+    #   fwd_3d[out, lane, var] = f(x + eps*e_var)[out, lane]
+    #
+    # CSC column ordering for batchdim=2 (block-diagonal Jacobian):
+    #   col j (0-indexed)  <->  lane = j div nx,  var = j mod nx
+    #
+    # Each column j holds ny contiguous nzval entries:
+    #   nzval[colptr[j+1] : colptr[j+1]+ny-1] = tang[:, lane, var]
+    #
+    # This equals the col-major linearisation of permutedims(tang, (1,3,2))
+    # i.e. shape (ny, nx, nlanes), written as a direct loop.
+    # ------------------------------------------------------------------
+
+    fwd_flat = @view y1[:, (nlanes + 1):(nlanes*(nx + 1))]  # (ny, nlanes*nx)
+    fwd_3d   = reshape(fwd_flat, ny, nlanes, nx)             # (out, lane, var)
+
+    # epsilon has shape (1, nlanes) for batchdim=2
+    eps_vec  = @view epsilon[1, :]                           # length nlanes
+
+    if mode == Val{:central}
+      rwd_flat = @view y1[:, (nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1))]
+      rwd_3d   = reshape(rwd_flat, ny, nlanes, nx)
+
+      for lane in 0:(nlanes - 1)
+        for var in 0:(nx - 1)
+          j       = lane * nx + var        # 0-indexed CSC column
+          col_lo  = colptr[j + 1]
+          two_eps = 2 * eps_vec[lane + 1]
+          for out in 1:ny
+            nzval[col_lo + out - 1] =
+              (fwd_3d[out, lane + 1, var + 1] - rwd_3d[out, lane + 1, var + 1]) / two_eps
+          end
+        end
+      end
+
+    else  # :forward
+      primal_mat = @view y1[:, 1:nlanes]                    # (ny, nlanes)
+
+      for lane in 0:(nlanes - 1)
+        for var in 0:(nx - 1)
+          j        = lane * nx + var
+          col_lo   = colptr[j + 1]
+          eps_lane = eps_vec[lane + 1]
+          for out in 1:ny
+            nzval[col_lo + out - 1] =
+              (fwd_3d[out, lane + 1, var + 1] - primal_mat[out, lane + 1]) / eps_lane
+          end
+        end
+      end
+    end
+  end
+
+  return jac
+end
+=#
 
 # Jacobian calls now just pass thru straight to the sparse backend:
 
