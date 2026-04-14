@@ -130,9 +130,10 @@ function set_batch_fdj_input!(x, prep::BatchFiniteDiffJacobianPrep, backend::Aut
   nlanes = size(x, batchdim)
   mode = fdjtype(dense_ad(backend))
   
-  idx_primal = ntuple(i -> i == batchdim ? (1:nlanes) : (1:nx), Val{2}())
-  lane_norms = mapslices(norm, reshape(x, last(idx_primal[1]), last(idx_primal[2])); dims=otherdim)
+  lane_norms = sqrt.(sum(abs2, x; dims=otherdim))
   epsilon .= compute_epsilon.(mode(), lane_norms, relstep, absstep, dir)
+
+  idx_primal = ntuple(i -> i == batchdim ? (1:nlanes) : (1:nx), Val{2}())
 
   # Set primal (first nlanes rows/cols along batchdim)
   x1[idx_primal...] .= x

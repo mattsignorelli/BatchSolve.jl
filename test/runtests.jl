@@ -8,3 +8,7 @@ end
 @testset "Newton Root Finder" begin
     include("newton_test.jl")
 end 
+
+@testset "AutoBatch{AutoFiniteDiff}" begin
+    include("finitediff_test.jl")
+end 
