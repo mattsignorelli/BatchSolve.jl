@@ -5,16 +5,14 @@
 [![Build Status](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/mattsignorelli/BatchSolve.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/mattsignorelli/BatchSolve.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/mattsignorelli/BatchSolve.jl)
 
-Are you looking for...
-
-- Solvers for (GPU) vectorized residual/merit functions that are compatible with automatic differentiation?
-- A vectorized and batchable finite differences method?
-- A lightweight package with a mutable interface?
-- Solvers that directly plug into CUDA's cuBLAS library for batched linear solving?
-
-Look no further!
-
 `BatchSolve.jl` aims to provide various functionalities for solving batch-able, vectorized residual functions (for root finding) and objective functions (for minimizing). As long as your function is vectorized, then `BatchSolve.jl` will take care of the rest! 
+
+In summary, this package features:
+
+- Solvers for (GPU) vectorized residual/merit functions
+- The `AutoBatch` automatic-differentiation (AD) type for computing batches of derivatives of CPU/GPU vectorized/parallel functions, and is also fully compatible with [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl) and any of its supported AD backends
+- Specialized bindings for [`FiniteDiff.jl`](https://github.com/JuliaDiff/FiniteDiff.jl) with `AutoBatch` to compute CPU/GPU vectorized finite differences
+- Solvers that directly plug into CUDA's cuBLAS library for batched linear solving 
 
 What do we mean by "vectorized"? Say you want to find the root `x` of this function given some parameters `p`:
 
@@ -36,7 +34,7 @@ With `BatchSolve.jl`, we can do root finding on this function in a vectorized wa
 sol = newton(f_vectorized, zeros(10000), Constant(1:10000), batchdim=1)
 ```
 
-where we specified that `p` is a `Constant` - not mutated throughout function evaluation. Arguments could also be specified as `Cache` if they are mutated. These constructs are re-exported from [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl), and more details can be found [here](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/tutorials/advanced/#Contexts). For all automatic-differentiation (AD) purposes, `BatchSolve` uses `DifferentiationInterface`. Therefore it is easy to use a different AD backend, e.g. `Enzyme`:
+where we specified that `p` is a `Constant` - not mutated throughout function evaluation. Arguments could also be specified as `Cache` if they are mutated. These constructs are re-exported from [`DifferentiationInterface.jl`](https://github.com/JuliaDiff/DifferentiationInterface.jl), and more details can be found [here](https://juliadiff.org/DifferentiationInterface.jl/DifferentiationInterface/stable/tutorials/advanced/#Contexts). For all AD purposes, `BatchSolve` uses `DifferentiationInterface`. Therefore it is easy to use a different AD backend, e.g. `Enzyme`:
 
 ```julia
 using Enzyme
@@ -99,7 +97,9 @@ While the example shown above uses the broadcast operators with GPU arrays, you 
 
 ## Vectorized Finite Differences
 
-This package also features an experimental AD backend `AutoVecFD`, which accelerates a finite differences calculation for vectorized functions: if a function is vectorized, then instead of evaluating the same function many times for each tangent, we can just evaluate it a single time for all tangents. This can offer massive speedups in the case where your function is extremely expensive to evaluate.
+This package also features special bindings for [`FiniteDiff.jl`](https://github.com/JuliaDiff/FiniteDiff.jl) with `AutoBatch` to accelerate finite differences calculations for vectorized functions: if a function is vectorized, then instead of evaluating the same function many times for each tangent, we can just evaluate it a single time for all tangents. This can offer massive speedups in the case where your function is extremely expensive to evaluate.
+
+Here is a simple example that shows approximately a **250,000x speedup** of vectorized vs non-vectorized finite differences on the GPU:
 
 ## Should you NOT use this package?
 
