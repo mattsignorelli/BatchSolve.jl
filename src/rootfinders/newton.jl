@@ -56,72 +56,14 @@ function newton!(
   solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), # We do specialize on the solver tho
   dx=zero.(x), # Temporary
 ) where {Y,X,T}
-  if !isnothing(batchdim)
-    if !(batchdim in (1,2))
-      error("batchdim must be either 1 or 2")
-    end
-
-    # Sanity checks
-    if size(x, batchdim) != size(y, batchdim)
-        error("Input/output matrix size mismatch for batched newton: batched-dimension $batchdim size for 
-                the input and output must be equal. Received $(size(x, batchdim)) and $(size(y, batchdim)) respectively.")
-    end
-
-    # If we are batch and the user has NOT specified an AutoSparse autodiff, set it up for them
-    if !(autodiff isa AutoSparse)
-      if !isnothing(prep)
-        @warn "You specified a batchdim and provided AD prep, but your AD autodiff is NOT AutoSparse, which is required for batched-Newton.
-               Your prep will therefore NOT be used."
-        prep = nothing
-      end
-
-
-      batchsize = size(x, batchdim)
-      otherdim = mod(batchdim, 2) + 1
-      n_rows = size(y, otherdim)
-      n_cols = size(x, otherdim)
-
-      # Make it on the CPU
-      nnz = batchsize * n_rows * n_cols
-      rows = Vector{Int}(undef, nnz)
-      cols = Vector{Int}(undef, nnz)
-
-      rs, ri = batchdim == 1 ? (1, batchsize) : (n_rows, 1)
-      cs, ci = batchdim == 1 ? (1, batchsize) : (n_cols, 1)
-
-      idx = 1
-      for i in 1:batchsize
-          for r in 1:n_rows
-              for c in 1:n_cols
-                  rows[idx] = (i-1)*rs + (r-1)*ri + 1
-                  cols[idx] = (i-1)*cs + (c-1)*ci + 1
-                  idx += 1
-              end
-          end
-      end
-      d_rows = similar(y, Int, nnz)
-      d_cols = similar(y, Int, nnz)
-      d_mat = similar(y, Bool, nnz)
-      copyto!(d_rows, rows)
-      copyto!(d_cols, cols)
-      d_mat .= 1
-
-      pattern = sparse(d_rows, d_cols, d_mat, batchsize*n_rows, batchsize*n_cols)
-      color = (batchdim == 1) ? repeat(1:n_cols, inner=batchsize) : repeat(1:n_cols, outer=batchsize) 
-      alg = ConstantColoringAlgorithm(pattern, color; partition=:column)
-
-      detector = ADTypes.KnownJacobianSparsityDetector(pattern)
-      autodiff = AutoSparse(autodiff; 
-        sparsity_detector=detector,
-        coloring_algorithm=alg,
-      )
-    end
+  if !isnothing(batchdim) && !(autodiff isa AutoBatch)
+    autodiff = AutoBatch(autodiff; batchdim=batchdim)
   end
 
   if isnothing(prep)
     prep = DI.prepare_jacobian(f!, y, autodiff, x, contexts...)
   end
-  if autodiff isa AutoSparse
+  if autodiff isa AutoBatch || autodiff isa AutoSparse
     jac = similar(sparsity_pattern(prep), eltype(y))
   else
     if Y <: StaticArray && X <: StaticArray
@@ -146,8 +88,8 @@ function newton!(
   abstol=sqrt(eps(eltype(y))), 
   maxiter=100, 
   batchdim::Union{Nothing,Integer}=nothing, 
-  iters=isnothing(batchdim) ? nothing : similar(x, Int, size(x, batchdim)), # If batch, then array that should be modified in-place with the iteration when convergence reached
-  retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, size(x, batchdim)),
+  iters=isnothing(batchdim) ? nothing : similar(x, Int, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())), # If batch, then array that should be modified in-place with the iteration when convergence reached
+  retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())),
   solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), 
   dx=zero.(x),
 ) where {T}
@@ -162,7 +104,7 @@ function newton!(
       @warn "You provided `retcode`, but this is only used for batched-Newton. Non-batched Newton 
              always returns a scalar `retcode`."
     end
-    out = merge(out, (; retcode=RETCODE_MAXITERS, iters=0))
+    out = merge(out, (; retcode=RETCODE_MAXITER, iters=0))
     # Newton:
     dx .= 0
     for iter in 1:maxiter
@@ -187,10 +129,10 @@ function newton!(
     @reset out.iters=maxiter
     return out
   else
-    otherdim = mod(batchdim, 2)+1
+    otherdim = mod(batchdim, 2) + 1
     abstol2 = abstol^2
     reltol2 = reltol^2
-    fill!(retcode, RETCODE_MAXITERS)
+    fill!(retcode, RETCODE_MAXITER)
     fill!(iters, -1)
     out = merge(out, (; retcode=retcode, iters=iters))
     # Newton:
@@ -198,10 +140,6 @@ function newton!(
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
       solver(dx, jac, y)
-      @show size(dx)
-      @show size(out.retcode)
-      @show size(any(isnan, dx, dims=otherdim))
-      @show size(ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode))
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
         (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1, 
@@ -214,8 +152,8 @@ function newton!(
         iter,
         out.iters
       )
-      out.retcode .= ifelse.(out.iters .!= -1 .&& out.retcode .== RETCODE_MAXITERS, RETCODE_SUCCESS, out.retcode)
-      if all(out.retcode .!= RETCODE_MAXITERS)
+      out.retcode .= ifelse.(out.iters .!= -1 .&& out.retcode .== RETCODE_MAXITER, RETCODE_SUCCESS, out.retcode)
+      if all(out.retcode .!= RETCODE_MAXITER)
         break
       end
     end
@@ -228,7 +166,13 @@ function newton_solver(device, _y, _x, batchdim)
   _ly = length(_y)
   if isnothing(batchdim)
     let lx=_lx, ly=_ly
-      return (dx, jac, y)->(reshape(dx, lx) .= -jac \ reshape(y, ly))
+      return (dx, jac, y)->begin
+        if ArrayInterface.issingular(jac)
+          dx .= NaN32
+        else
+          reshape(dx, lx) .= -jac \ reshape(y, ly)
+        end
+      end
     end
   elseif batchdim == 2 # Do each serially
     _batchsize = size(_x, 2)
