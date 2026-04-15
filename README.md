@@ -81,15 +81,15 @@ The problem with this approach is that now instead of solving many small 2x2 sys
 
 For CUDA arrays, `BatchSolve.jl` plugs directly into CUDA's cuBLAS library which provides GPU-accelerated batched linear system solving.
 
-Currently implemented batched solvers include:
+Implemented batched solvers include:
 
 ### Root Finders
 - Newton-Raphson `newton` (uses derivatives)
 
 ### Minimizers
 - Differential evolution `de`
-- Genetic algorithm `ga`
-- 1D Brent's method `brent`
+- COMING SOON: Genetic algorithm `ga`
+- COMING SOON: 1D Brent's method `brent`
  
 ## Data Structures, SIMD, and which `batchdim`?
 
