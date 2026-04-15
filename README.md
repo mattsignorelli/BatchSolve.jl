@@ -87,9 +87,9 @@ Implemented batched solvers include:
 - Newton-Raphson `newton` (uses derivatives)
 
 ### Minimizers
-- Differential evolution `de`
+- 1D Brent's method `brent`
+- COMING SOON: Differential evolution `de`
 - COMING SOON: Genetic algorithm `ga`
-- COMING SOON: 1D Brent's method `brent`
  
 ## Data Structures, SIMD, and which `batchdim`?
 
