@@ -84,7 +84,7 @@ function _context_lower!(context_cache::Context, context::Context, batchdim)
   return DI.maker(context_cache)(_set_context!(DI.unwrap(context_cache), DI.unwrap(context), batchdim))
 end
 
-_set_context!(context_cache_data::Number, context_data::Number, batchdim) = context_data
+_set_context!(context_cache_data, context_data, batchdim) = context_data
 function _set_context!(context_cache_data::AbstractArray, context_data::AbstractArray, batchdim)
   chunksize = size(context_data, batchdim)
   nx = size(context_data, mod(batchdim, 2) + 1)
