@@ -27,6 +27,7 @@ BatchSolveCUDAExt = "CUDA"
 BatchSolveGPUArraysCoreExt = ["GPUArraysCore", "DifferentiationInterface", "LinearAlgebra"]
 
 [compat]
+Accessors = "0.1"
 ADTypes = "1"
 ArrayInterface = "7"
 CUDA = "5.9"
