@@ -9,7 +9,6 @@ using Reexport
 using Accessors,
     ADTypes,
     ArrayInterface,
-    EnumX,
     FiniteDiff,
     ForwardDiff,
     LinearAlgebra,
