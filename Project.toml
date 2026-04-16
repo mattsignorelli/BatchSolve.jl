@@ -1,7 +1,7 @@
 name = "BatchSolve"
 uuid = "87e15b6a-8d99-4cf4-8ad5-fed92cf0c427"
-authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
 version = "0.1.0"
+authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -26,10 +26,18 @@ BatchSolveCUDAExt = "CUDA"
 BatchSolveGPUArraysCoreExt = ["GPUArraysCore", "DifferentiationInterface", "LinearAlgebra"]
 
 [compat]
-CUDA = "5.9"
+Accessors = "0.1"
+ADTypes = "1"
+ArrayInterface = "7"
+CUDA = "5.9, 6"
 DifferentiationInterface = "0.7.4"
+FiniteDiff = "2"
 ForwardDiff = "0.10,1"
 GPUArraysCore = "0.2.0"
+KernelAbstractions = "0.9"
+Reexport = "1"
+StaticArrays = "1"
+SparseMatrixColorings = "0.4"
 julia = "1.10"
 
 [extras]
