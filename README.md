@@ -77,7 +77,7 @@ p = rand(20000)
 sol = newton(g, x0, Constant(p))
 ```
 
-The problem with this approach is that now instead of solving many small 2x2 systems, the linear algebra solver needs to solve a giant 20000 x 20000 matrix equation. This will generally be much slower than just solving many small systems. In fact, we tested this approach with CUDA's cuSPARSE solver, and unfortunately we found performance to scale poorly beyond 60000 x 60000 systems. 
+The problem with this approach is that now instead of solving many small 2x2 systems, the linear algebra solver needs to solve a giant 20000 x 20000 matrix equation. This will generally be much slower than just solving many small systems. In fact, we tested this approach with CUDA's cuDSS solver, and unfortunately we found performance to scale poorly beyond 60000 x 60000 systems. 
 
 For CUDA arrays, `BatchSolve.jl` plugs directly into CUDA's cuBLAS library which provides GPU-accelerated batched linear system solving.
 
