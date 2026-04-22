@@ -110,7 +110,9 @@ function _value_and_jacobian_aux!(
     f! = f_or_f!y[1]
     y = f_or_f!y[2]
     f!(prep.y1, prep.x1)
-    y[:] .= view(prep.y1, 1:length(y))
+    batchdim = prep.batchdim
+    otherdim = mod(batchdim, 2) + 1
+    y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...)
   end
   compute_batch_fdj_jac!(jac, prep, backend)
   return y, jac
