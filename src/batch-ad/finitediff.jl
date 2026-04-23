@@ -59,7 +59,7 @@ function _prepare_batch_jacobian_aux(
         error("AbstractArray Contexts for AutoBatch{<:AutoFiniteDiff} must have a size along batchdim equal 
                to the size along batchdim of the input array: received Context with size $(size(DI.unwrap(c), batchdim)) along batchdim.")
       end
-      sb = size(DI.unwrap(c), batchdim)*(1 + size(DI.unwrap(c), otherdim)*(mode == Val{:central} ? 2 : 1))
+      sb = size(DI.unwrap(c), batchdim)*(1 + nx*(mode == Val{:central} ? 2 : 1))
       DI.maker(c)(similar(DI.unwrap(c), ntuple(i -> i == batchdim ? sb : size(DI.unwrap(c), otherdim), Val{2}())))
     else
       c
@@ -110,7 +110,9 @@ function _value_and_jacobian_aux!(
     f! = f_or_f!y[1]
     y = f_or_f!y[2]
     f!(prep.y1, prep.x1)
-    y[:] .= view(prep.y1, 1:length(y))
+    batchdim = prep.batchdim
+    otherdim = mod(batchdim, 2) + 1
+    y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...)
   end
   compute_batch_fdj_jac!(jac, prep, backend)
   return y, jac

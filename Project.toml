@@ -1,6 +1,6 @@
 name = "BatchSolve"
 uuid = "87e15b6a-8d99-4cf4-8ad5-fed92cf0c427"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["mattsignorelli <mgs255@cornell.edu> and contributors"]
 
 [deps]

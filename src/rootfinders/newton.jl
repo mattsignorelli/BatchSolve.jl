@@ -142,8 +142,8 @@ function newton!(
       solver(dx, jac, y)
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
-        (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1, 
-        iter-1, 
+        (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1,
+        iter-1,
         out.iters
       )
       x .= x .+ (out.iters .== -1) .* dx
@@ -199,7 +199,7 @@ function newton_solver(device, _y, _x, batchdim)
     let n_rows=_n_rows, batchsize=_batchsize, xlen=length(_x), ylen=length(_y)
       return (dx, jac::SparseMatrixCSC, y)->begin
         for i in 1:batchsize
-          curjac = view(reshape(jac.nzval, n_rows, :), :, i:batchsize:ylen)
+          curjac = view(reshape(jac.nzval, n_rows, :), :, i:batchsize:xlen)
           if ArrayInterface.issingular(curjac)
             view(dx, i:batchsize:xlen) .= NaN32
           else
