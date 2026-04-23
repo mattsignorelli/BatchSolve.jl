@@ -94,7 +94,7 @@ function newton!(
   dx=zero.(x),
 ) where {T}
   # Setup:
-  out = (; u=x, jac=jac)
+  out = (; u=x, f=y, jac=jac)
   if isnothing(batchdim)
     if !isnothing(iters)
       @warn "You provided `iters`, but this is only used for batched-Newton. Non-batched Newton 

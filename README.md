@@ -43,6 +43,7 @@ sol = newton(f_vectorized, zeros(10000), Constant(1:10000), batchdim=1, autodiff
 
 The returned object is a `NamedTuple` with the fields:
 - `u`: an array with size equal to the input array, containing the inputs at the roots
+- `f`: an array with size equal to the output array, containing the outputs at the roots (should be zero for converged inputs)
 - `jac`: a (sparse) matrix storing the Jacobian for the entire batched-system at the last iteration
 - `retcode`: an array of return codes for each element in the batch, where `0x0` is success, `0x1` is failure, and `0x2` means the maximum number of iterations was reached
 - `iters`: an array storing the number of iterations until convergence for each element in the batch
