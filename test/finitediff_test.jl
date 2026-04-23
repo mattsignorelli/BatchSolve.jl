@@ -1078,3 +1078,211 @@ end
         end
     end
 end
+
+# ============================================================================
+# Section 11: f! primal output correctness (non-square, both batchdims)
+#
+# The in-place path previously used `y[:] .= view(prep.y1, 1:length(y))` which
+# indexes the flattened array in column-major order.  For batchdim=1 with ny>1
+# this picks the wrong elements (first column only, repeated), so value_and_jacobian
+# returned the wrong primal y even when the Jacobian was correct.
+# ============================================================================
+
+@testset "f! primal output correctness" begin
+
+    @testset "Tall f! batchdim=1, ny=3, nx=2, nlanes=5: y correct" begin
+        nlanes, nx, ny = 5, 2, 3
+        x  = randn(MersenneTwister(130), nlanes, nx) .+ 1.0
+        y  = zeros(nlanes, ny)
+        function ftall_y!(y, x)
+            y[:,1] .= x[:,1] .+ x[:,2]
+            y[:,2] .= x[:,1] .* x[:,2]
+            y[:,3] .= x[:,1].^2
+        end
+        pfd = DI.prepare_jacobian(ftall_y!, y, make_fd_fwd(1), x)
+        y_out, _ = DI.value_and_jacobian(ftall_y!, y, pfd, make_fd_fwd(1), x)
+        y_expected = copy(y); ftall_y!(y_expected, x)
+        @test y_out ≈ y_expected
+    end
+
+    @testset "Wide f! batchdim=1, ny=2, nx=4, nlanes=5: y correct" begin
+        nlanes, nx, ny = 5, 4, 2
+        x  = randn(MersenneTwister(131), nlanes, nx) .+ 1.0
+        y  = zeros(nlanes, ny)
+        function fwide_y1!(y, x)
+            y[:,1] .= x[:,1] .+ x[:,2] .+ x[:,3] .+ x[:,4]
+            y[:,2] .= x[:,1] .* x[:,2] .+ x[:,3] .* x[:,4]
+        end
+        pfd = DI.prepare_jacobian(fwide_y1!, y, make_fd_fwd(1), x)
+        y_out, _ = DI.value_and_jacobian(fwide_y1!, y, pfd, make_fd_fwd(1), x)
+        y_expected = copy(y); fwide_y1!(y_expected, x)
+        @test y_out ≈ y_expected
+    end
+
+    @testset "Tall f! batchdim=2, ny=3, nx=2, nlanes=5: y correct" begin
+        nx, ny, nlanes = 2, 3, 5
+        x  = randn(MersenneTwister(132), nx, nlanes) .+ 1.0
+        y  = zeros(ny, nlanes)
+        function ftall_y2!(y, x)
+            y[1,:] .= x[1,:] .+ x[2,:]
+            y[2,:] .= x[1,:] .* x[2,:]
+            y[3,:] .= x[1,:].^2
+        end
+        pfd = DI.prepare_jacobian(ftall_y2!, y, make_fd_fwd(2), x)
+        y_out, _ = DI.value_and_jacobian(ftall_y2!, y, pfd, make_fd_fwd(2), x)
+        y_expected = copy(y); ftall_y2!(y_expected, x)
+        @test y_out ≈ y_expected
+    end
+
+    @testset "Wide f! batchdim=2, ny=2, nx=4, nlanes=5: y correct" begin
+        nx, ny, nlanes = 4, 2, 5
+        x  = randn(MersenneTwister(133), nx, nlanes) .+ 1.0
+        y  = zeros(ny, nlanes)
+        function fwide_y2!(y, x)
+            y[1,:] .= x[1,:] .+ x[2,:] .+ x[3,:] .+ x[4,:]
+            y[2,:] .= x[1,:] .* x[2,:] .+ x[3,:] .* x[4,:]
+        end
+        pfd = DI.prepare_jacobian(fwide_y2!, y, make_fd_fwd(2), x)
+        y_out, _ = DI.value_and_jacobian(fwide_y2!, y, pfd, make_fd_fwd(2), x)
+        y_expected = copy(y); fwide_y2!(y_expected, x)
+        @test y_out ≈ y_expected
+    end
+
+    @testset "Square f! batchdim=1, ny=3, nx=3, nlanes=5: y correct (ny>1 base case)" begin
+        nlanes, nx = 5, 3
+        x  = randn(MersenneTwister(134), nlanes, nx) .+ 1.0
+        y  = similar(x)
+        f_sq!(y, x) = (y .= sin.(x))
+        pfd = DI.prepare_jacobian(f_sq!, y, make_fd_fwd(1), x)
+        y_out, _ = DI.value_and_jacobian(f_sq!, y, pfd, make_fd_fwd(1), x)
+        @test y_out ≈ sin.(x)
+    end
+
+    @testset "Central: tall f! batchdim=1, ny=3, nx=2, nlanes=6: y correct" begin
+        nlanes, nx, ny = 6, 2, 3
+        x  = randn(MersenneTwister(135), nlanes, nx) .+ 0.5
+        y  = zeros(nlanes, ny)
+        function ftall_cen!(y, x)
+            y[:,1] .= sin.(x[:,1])
+            y[:,2] .= cos.(x[:,2])
+            y[:,3] .= x[:,1] .* x[:,2]
+        end
+        pfd = DI.prepare_jacobian(ftall_cen!, y, make_fd_cen(1), x)
+        y_out, _ = DI.value_and_jacobian(ftall_cen!, y, pfd, make_fd_cen(1), x)
+        y_expected = copy(y); ftall_cen!(y_expected, x)
+        @test y_out ≈ y_expected
+    end
+end
+
+# ============================================================================
+# Section 12: AbstractArray Constant contexts for AutoBatch{<:AutoFiniteDiff}
+#
+# When a context is an AbstractArray, its size along batchdim must be expanded
+# to match the enlarged x1/y1 arrays used for finite differencing.  The expansion
+# size was previously computed using the context's otherdim size instead of nx
+# (the input's otherdim size), causing a wrong-size cache when they differ.
+# ============================================================================
+
+@testset "AbstractArray Constant context" begin
+
+    @testset "Array context, otherdim=1 ≠ nx=3, batchdim=1, forward" begin
+        # context b has shape (nlanes, 1), x has shape (nlanes, nx=3): sizes differ in otherdim
+        nlanes, nx = 4, 3
+        x  = randn(MersenneTwister(140), nlanes, nx) .+ 1.0
+        b  = randn(MersenneTwister(141), nlanes, 1) .+ 2.0  # per-lane scalar broadcast
+        fc(x, b) = x .* b   # J_lane = diag(fill(b[lane], nx))
+        bfd = make_fd_fwd(1)
+        bfa = make_fad(1)
+        pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
+        pfa = DI.prepare_jacobian(fc, bfa, x, Constant(b))
+        Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        Jfa = DI.jacobian(fc, pfa, bfa, x, Constant(b))
+        @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
+        for lane in 1:nlanes
+            J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
+            @test diag(J) ≈ fill(b[lane, 1], nx)  atol=ATOL_FWD
+        end
+    end
+
+    @testset "Array context, otherdim=1 ≠ nx=3, batchdim=1, central" begin
+        nlanes, nx = 4, 3
+        x  = randn(MersenneTwister(142), nlanes, nx) .+ 1.0
+        b  = randn(MersenneTwister(143), nlanes, 1) .+ 2.0
+        fc(x, b) = x .^ 2 .* b
+        bfd = make_fd_cen(1)
+        pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
+        pfa = DI.prepare_jacobian(fc, make_fad(1), x, Constant(b))
+        Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        Jfa = DI.jacobian(fc, pfa, make_fad(1), x, Constant(b))
+        @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
+        for lane in 1:nlanes
+            J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
+            @test diag(J) ≈ 2 .* x[lane,:] .* b[lane, 1]  atol=ATOL_CEN
+        end
+    end
+
+    @testset "Array context, otherdim=1 ≠ nx=4, batchdim=2, forward" begin
+        nx, nlanes = 4, 5
+        x  = randn(MersenneTwister(144), nx, nlanes) .+ 1.0
+        b  = randn(MersenneTwister(145), 1, nlanes) .+ 2.0  # per-lane scalar broadcast
+        fc(x, b) = x .* b
+        bfd = make_fd_fwd(2)
+        bfa = make_fad(2)
+        pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
+        pfa = DI.prepare_jacobian(fc, bfa, x, Constant(b))
+        Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        Jfa = DI.jacobian(fc, pfa, bfa, x, Constant(b))
+        @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
+        for lane in 1:nlanes
+            J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
+            @test diag(J) ≈ fill(b[1, lane], nx)  atol=ATOL_FWD
+        end
+    end
+
+    @testset "Array context, otherdim=1 ≠ nx=4, batchdim=2, central" begin
+        nx, nlanes = 4, 5
+        x  = randn(MersenneTwister(146), nx, nlanes) .+ 1.0
+        b  = randn(MersenneTwister(147), 1, nlanes) .+ 2.0
+        fc(x, b) = sin.(x) .* b
+        bfd = make_fd_cen(2)
+        pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
+        pfa = DI.prepare_jacobian(fc, make_fad(2), x, Constant(b))
+        Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        Jfa = DI.jacobian(fc, pfa, make_fad(2), x, Constant(b))
+        @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
+        for lane in 1:nlanes
+            J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
+            @test diag(J) ≈ cos.(x[:,lane]) .* b[1, lane]  atol=ATOL_CEN
+        end
+    end
+
+    @testset "Array context matches scalar context, batchdim=1, forward" begin
+        # Verify array context (each lane has same value) gives same result as scalar context
+        nlanes, nx = 5, 3
+        x    = randn(MersenneTwister(148), nlanes, nx) .+ 1.0
+        c_sc = 2.5
+        c_ar = fill(c_sc, nlanes, 1)  # array context, same value in each lane
+        fc(x, c) = c .* sin.(x)
+        bfd = make_fd_fwd(1)
+        psc = DI.prepare_jacobian(fc, bfd, x, Constant(c_sc))
+        par = DI.prepare_jacobian(fc, bfd, x, Constant(c_ar))
+        Jsc = DI.jacobian(fc, psc, bfd, x, Constant(c_sc))
+        Jar = DI.jacobian(fc, par, bfd, x, Constant(c_ar))
+        @test jac_ok(Jsc, Jar; atol=ATOL_FWD)
+    end
+
+    @testset "f! with array context, batchdim=1, forward" begin
+        nlanes, nx = 4, 3
+        x  = randn(MersenneTwister(149), nlanes, nx) .+ 1.0
+        b  = randn(MersenneTwister(150), nlanes, 1) .+ 2.0
+        y  = similar(x)
+        fc!(y, x, b) = (y .= x .* b)
+        bfd = make_fd_fwd(1)
+        bfa = make_fad(1)
+        pfd = DI.prepare_jacobian(fc!, y, bfd, x, Constant(b))
+        pfa = DI.prepare_jacobian(fc!, y, bfa, x, Constant(b))
+        Jfd = DI.jacobian(fc!, y, pfd, bfd, x, Constant(b))
+        Jfa = DI.jacobian(fc!, y, pfa, bfa, x, Constant(b))
+        @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
+    end
+end

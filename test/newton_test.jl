@@ -557,6 +557,101 @@ end
     @test sol.u[1] ≈ 3.0^(1/5)
 end
 
+# ===========================================================================
+# Non-square batched Newton (ny ≠ nx, multiple lanes)
+# These cover the batchdim=1 ylen-vs-xlen solver bug (square: ylen==xlen so
+# the bug was invisible) and verify that overdetermined systems with an exact
+# root converge correctly.
+# ===========================================================================
+
+@testset "NS1. Non-square batchdim=1: ny=2, nx=1, nlanes=3 (overdetermined)" begin
+    # Per-lane: f([x]) = [x-c, 2x-2c]. Root at x=c (both eqs zero there).
+    # J=[1;2], pseudoinverse step = x-c → converges in 1 iteration.
+    cs = [1.0, 2.0, 3.0]
+    f!(y, x) = (y[:,1] .= x[:,1] .- cs; y[:,2] .= 2 .* x[:,1] .- 2 .* cs)
+    x = zeros(3, 1); y = zeros(3, 2); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=1)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+    @test sol.u ≈ reshape(cs, 3, 1)
+end
+
+@testset "NS2. Non-square batchdim=1: ny=3, nx=2, nlanes=4 (overdetermined)" begin
+    # Per-lane: f([x1,x2]) = [x1-a, x2-b, x1+x2-(a+b)]. Root at [a,b].
+    # J=[1 0; 0 1; 1 1] has full column rank → pseudoinverse step exact.
+    rng = MersenneTwister(501)
+    as = rand(rng, 4); bs = rand(rng, 4)
+    f!(y, x) = (
+        y[:,1] .= x[:,1] .- as;
+        y[:,2] .= x[:,2] .- bs;
+        y[:,3] .= x[:,1] .+ x[:,2] .- (as .+ bs)
+    )
+    x = zeros(4, 2); y = zeros(4, 3); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=1)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+    @test sol.u[:,1] ≈ as
+    @test sol.u[:,2] ≈ bs
+end
+
+@testset "NS3. Non-square batchdim=2: ny=2, nx=1, nlanes=3 (overdetermined)" begin
+    cs = reshape([1.0, 2.0, 3.0], 1, 3)
+    f!(y, x) = (y[1:1,:] .= x .- cs; y[2:2,:] .= 2 .* x .- 2 .* cs)
+    x = zeros(1, 3); y = zeros(2, 3); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=2)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+    @test sol.u ≈ cs
+end
+
+@testset "NS4. Non-square batchdim=2: ny=3, nx=2, nlanes=4 (overdetermined)" begin
+    rng = MersenneTwister(504)
+    as = rand(rng, 1, 4); bs = rand(rng, 1, 4)
+    f!(y, x) = (
+        y[1:1,:] .= x[1:1,:] .- as;
+        y[2:2,:] .= x[2:2,:] .- bs;
+        y[3:3,:] .= x[1:1,:] .+ x[2:2,:] .- (as .+ bs)
+    )
+    x = zeros(2, 4); y = zeros(3, 4); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=2)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+    @test sol.u[1:1,:] ≈ as
+    @test sol.u[2:2,:] ≈ bs
+end
+
+@testset "NS5. Non-square batchdim=1: retcode/iters shape (ny=2, nx=1, nlanes=5)" begin
+    cs = ones(5)
+    f!(y, x) = (y[:,1] .= x[:,1] .- cs; y[:,2] .= 2 .* x[:,1] .- 2 .* cs)
+    x = zeros(5, 1); y = zeros(5, 2); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=1)
+    @test size(sol.retcode) == (5, 1)
+    @test size(sol.iters)   == (5, 1)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+end
+
+@testset "NS6. Non-square batchdim=2: retcode/iters shape (ny=3, nx=2, nlanes=6)" begin
+    rng = MersenneTwister(506)
+    as = rand(rng, 1, 6); bs = rand(rng, 1, 6)
+    f!(y, x) = (
+        y[1:1,:] .= x[1:1,:] .- as;
+        y[2:2,:] .= x[2:2,:] .- bs;
+        y[3:3,:] .= x[1:1,:] .+ x[2:2,:] .- (as .+ bs)
+    )
+    x = zeros(2, 6); y = zeros(3, 6); f!(y, x)
+    sol = newton!(f!, y, x; batchdim=2)
+    @test size(sol.retcode) == (1, 6)
+    @test size(sol.iters)   == (1, 6)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+end
+
+@testset "NS7. Non-square batchdim=1 with Context: ny=2, nx=1, nlanes=3" begin
+    # Uses newton's context path to exercise AutoBatch+AutoFiniteDiff with non-square
+    cs = [1.0, 2.0, 3.0]
+    scale = 2.0
+    f!(y, x, s) = (y[:,1] .= s .* x[:,1] .- s .* cs; y[:,2] .= x[:,1] .- cs)
+    x = zeros(3, 1); y = zeros(3, 2); f!(y, x, scale)
+    sol = newton!(f!, y, x, Constant(scale); batchdim=1)
+    @test all(sol.retcode .== RETCODE_SUCCESS)
+    @test sol.u ≈ reshape(cs, 3, 1)
+end
+
 @testset "B6. Batch: solution independent of lane ordering, batchdim=1" begin
     n    = 30
     cs   = rand(MersenneTwister(77), n) .* 5

@@ -139,28 +139,14 @@ function newton!(
     dx .= 0
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
-     # @show norm(y)
-     # @show permutedims(reshape(jac.nzval, 4, 2, 4), (1, 3, 2)) 
-      @show y
       solver(dx, jac, y)
-      @show dx
-      #=
-      @show dx
-      @show jac
-      @show y
-      @show (sum(abs2, y, dims=otherdim) .< abstol2)
-      @show out.retcode .== RETCODE_FAILURE
-      @show out.iters .== -1=#
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
-        (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1, 
-        iter-1, 
+        (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1,
+        iter-1,
         out.iters
       )
-      @show out.iters
-      @show x
       x .= x .+ (out.iters .== -1) .* dx
-      @show x
       out.iters .= ifelse.(
         sum(abs2, dx, dims=otherdim) .< reltol2.*sum(abs2, x, dims=otherdim) .&& out.iters .== -1,
         iter,
@@ -214,7 +200,6 @@ function newton_solver(device, _y, _x, batchdim)
       return (dx, jac::SparseMatrixCSC, y)->begin
         for i in 1:batchsize
           curjac = view(reshape(jac.nzval, n_rows, :), :, i:batchsize:xlen)
-          @show curjac
           if ArrayInterface.issingular(curjac)
             view(dx, i:batchsize:xlen) .= NaN32
           else
