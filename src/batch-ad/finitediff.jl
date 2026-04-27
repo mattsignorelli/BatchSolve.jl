@@ -121,21 +121,24 @@ function _value_and_jacobian_aux!(
     f = f_or_f!y[1]
     prep.y1 .= f(prep.x1)
     # Allocate result:
-    batchdim = prep.batchdim
-    otherdim = mod(batchdim, 2) + 1
-    y = prep.y1[ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...]
+    _batchdim = prep.batchdim
+    _otherdim = mod(_batchdim, 2) + 1
+    let batchdim=_batchdim, batchsize=size(x, _batchdim), ny=size(prep.y1, _otherdim)
+      y = prep.y1[ntuple(i ->i == batchdim ? (1:batchsize) : (1:ny), Val{2}())...]
+    end
   else
     f! = f_or_f!y[1]
     y = f_or_f!y[2]
     f!(prep.y1, prep.x1)
-    batchdim = prep.batchdim
-    otherdim = mod(batchdim, 2) + 1
-    y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...)
+    _batchdim = prep.batchdim
+    _otherdim = mod(_batchdim, 2) + 1
+    let batchdim=_batchdim, batchsize=size(x, _batchdim), ny=size(prep.y1, _otherdim)
+      y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:batchsize) : (1:ny), Val{2}())...)
+    end
     # Also write the contexts with the contexts_cache primal values:
-
   end
   compute_batch_fdj_jac!(jac, prep, backend)
-  rewrite_primal_cache!(contexts, prep.contexts_cache, batchdim)
+  rewrite_primal_cache!(contexts, prep.contexts_cache, _batchdim)
   return y, jac
 end
 

@@ -139,6 +139,7 @@ function newton!(
     dx .= 0
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
+      @show norm(y)
       solver(dx, jac, y)
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
