@@ -71,21 +71,21 @@ function _prepare_batch_jacobian_aux(
 end
 
 # Jacobian:
-@generated function set_contexts!(contexts_cache::T1, contexts::T2, batchdim) where {T1<:Tuple,T2<:Tuple}
+@generated function expand_contexts!(contexts_cache::T1, contexts::T2, batchdim) where {T1<:Tuple,T2<:Tuple}
   N = length(T1.parameters)
   @assert N == length(T2.parameters) "Length of contexts_cache and contexts tuple disagree."
   exprs = [
-    :(_context_lower!(Base.getfield(contexts_cache, $i), Base.getfield(contexts, $i), batchdim)) 
+    :(_remake_expanded!(Base.getfield(contexts_cache, $i), Base.getfield(contexts, $i), batchdim)) 
   for i in 1:N ]
   return :(tuple($(exprs...)))
 end
 
-function _context_lower!(context_cache::Context, context::Context, batchdim)
-  return DI.maker(context_cache)(_set_context!(DI.unwrap(context_cache), DI.unwrap(context), batchdim))
+function _remake_expanded!(context_cache::Context, context::Context, batchdim)
+  return DI.maker(context_cache)(_expand_context!(DI.unwrap(context_cache), DI.unwrap(context), batchdim))
 end
 
-_set_context!(context_cache_data, context_data, batchdim) = context_data
-function _set_context!(context_cache_data::AbstractArray, context_data::AbstractArray, batchdim)
+_expand_context!(context_cache_data, context_data, batchdim) = context_data
+function _expand_context!(context_cache_data::AbstractArray, context_data::AbstractArray, batchdim)
   chunksize = size(context_data, batchdim)
   nx = size(context_data, mod(batchdim, 2) + 1)
   reps = div(size(context_cache_data, batchdim), chunksize)
@@ -95,8 +95,26 @@ function _set_context!(context_cache_data::AbstractArray, context_data::Abstract
   return context_cache_data
 end
 
+# To rewrite primals of expanded Cache in contexts_cache back to Cache:
+@generated function rewrite_primal_cache!(contexts::T1, contexts_cache::T2,  batchdim) where {T1<:Tuple,T2<:Tuple}
+  N = length(T1.parameters)
+  @assert N == length(T2.parameters) "Length of contexts and contexts_cache tuple disagree."
+  exprs = [
+    :(_write_cache!(Base.getfield(contexts, $i), Base.getfield(contexts_cache, $i), batchdim)) 
+  for i in 1:N ]
+  return :($(exprs...); return nothing)
+end
+
+_write_cache!(constant_or_nonexpanded_cache::Any, ::Any, ::Any) = constant_or_nonexpanded_cache
+function _write_cache!(cache::Cache{<:AbstractArray}, expanded_cache::Cache{<:AbstractArray}, batchdim)
+  chunksize = size(DI.unwrap(cache), batchdim)
+  nx = size(DI.unwrap(cache), mod(batchdim, 2) + 1)
+  DI.unwrap(cache) .= view(DI.unwrap(expanded_cache), ntuple(j -> j == batchdim ? (1:chunksize) : (1:nx), Val{2}())...)
+  return nothing
+end
+
 function _value_and_jacobian_aux!(
-    f_or_f!y::FY, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x,
+    f_or_f!y::FY, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts,
   ) where {FY}
   set_batch_fdj_input!(x, prep, backend)
   if length(f_or_f!y) == 1
@@ -113,8 +131,11 @@ function _value_and_jacobian_aux!(
     batchdim = prep.batchdim
     otherdim = mod(batchdim, 2) + 1
     y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...)
+    # Also write the contexts with the contexts_cache primal values:
+
   end
   compute_batch_fdj_jac!(jac, prep, backend)
+  rewrite_primal_cache!(contexts, prep.contexts_cache, batchdim)
   return y, jac
 end
 
@@ -269,38 +290,38 @@ function DI.jacobian!(
     f::F, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.jacobian(
     f::F, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.value_and_jacobian(
     f::F, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)
 end
 
 function DI.value_and_jacobian!(
     f::F, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)
 end
 
 
@@ -310,36 +331,36 @@ function DI.jacobian!(
     f!::F, y, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.jacobian(
     f!::F, y, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.value_and_jacobian(
     f!::F, y, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)
 end
 
 function DI.value_and_jacobian!(
     f!::F, y, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)
 end

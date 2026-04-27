@@ -68,7 +68,9 @@ jac_ok(jfd, jref; atol) = isapprox(Matrix(jfd), Matrix(jref); atol=atol)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             @test lane_jac(Jfd, lane, nlanes, nx, nx, 1) ≈ I(nx)  atol=ATOL_FWD
@@ -82,7 +84,9 @@ jac_ok(jfd, jref; atol) = isapprox(Matrix(jfd), Matrix(jref); atol=atol)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -99,7 +103,9 @@ jac_ok(jfd, jref; atol) = isapprox(Matrix(jfd), Matrix(jref); atol=atol)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             @test lane_jac(Jfd, lane, nlanes, nx, nx, 1) ≈ A  atol=ATOL_FWD
@@ -113,7 +119,9 @@ jac_ok(jfd, jref; atol) = isapprox(Matrix(jfd), Matrix(jref); atol=atol)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -128,7 +136,9 @@ jac_ok(jfd, jref; atol) = isapprox(Matrix(jfd), Matrix(jref); atol=atol)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 end
@@ -142,7 +152,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -157,7 +169,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -173,8 +187,11 @@ end
         pcen = DI.prepare_jacobian(f, make_fd_cen(1), x)
         pfa  = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfwd = DI.jacobian(f, pfwd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfwd, make_fd_fwd(1), x)
         Jcen = DI.jacobian(f, pcen, make_fd_cen(1), x)
+        @test_opt DI.jacobian(f, pcen, make_fd_cen(1), x)
         Jfa  = DI.jacobian(f, pfa,  make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         err_fwd = norm(Matrix(Jfwd) .- Matrix(Jfa))
         err_cen = norm(Matrix(Jcen) .- Matrix(Jfa))
         @test err_cen < err_fwd
@@ -194,7 +211,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -210,7 +229,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             @test lane_jac(Jfd, lane, nlanes, nx, nx, 2) ≈ A  atol=ATOL_FWD
@@ -224,7 +245,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -242,7 +265,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -257,7 +282,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
     end
 
@@ -269,7 +296,9 @@ end
         pfd1 = DI.prepare_jacobian(f, make_fd_fwd(1), x1)
         pfd2 = DI.prepare_jacobian(f, make_fd_fwd(2), x2)
         Jfd1 = DI.jacobian(f, pfd1, make_fd_fwd(1), x1)
+        @test_opt DI.jacobian(f, pfd1, make_fd_fwd(1), x1)
         Jfd2 = DI.jacobian(f, pfd2, make_fd_fwd(2), x2)
+        @test_opt DI.jacobian(f, pfd2, make_fd_fwd(2), x2)
         for lane in 1:nlanes
             J1 = lane_jac(Jfd1, lane, nlanes, nx, nx, 1)
             J2 = lane_jac(Jfd2, lane, nlanes, nx, nx, 2)
@@ -285,8 +314,11 @@ end
         pcen = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa  = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfwd = DI.jacobian(f, pfwd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f, pfwd, make_fd_fwd(2), x)
         Jcen = DI.jacobian(f, pcen, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pcen, make_fd_cen(2), x)
         Jfa  = DI.jacobian(f, pfa,  make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test norm(Matrix(Jcen) .- Matrix(Jfa)) < norm(Matrix(Jfwd) .- Matrix(Jfa))
     end
 end
@@ -317,7 +349,9 @@ end
         pfd = DI.prepare_jacobian(ftall1, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(ftall1, make_fad(1),    x)
         Jfd = DI.jacobian(ftall1, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(ftall1, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(ftall1, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(ftall1, pfa, make_fad(1), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -343,7 +377,9 @@ end
         pfd = DI.prepare_jacobian(ftall2, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(ftall2, make_fad(2),    x)
         Jfd = DI.jacobian(ftall2, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(ftall2, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(ftall2, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(ftall2, pfa, make_fad(2), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -371,7 +407,9 @@ end
         pfd = DI.prepare_jacobian(ftall5_1, make_fd_cen(1), x)
         pfa = DI.prepare_jacobian(ftall5_1, make_fad(1),    x)
         Jfd = DI.jacobian(ftall5_1, pfd, make_fd_cen(1), x)
+        @test_opt DI.jacobian(ftall5_1, pfd, make_fd_cen(1), x)
         Jfa = DI.jacobian(ftall5_1, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(ftall5_1, pfa, make_fad(1), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
@@ -392,7 +430,9 @@ end
         pfd = DI.prepare_jacobian(ftall5_2, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(ftall5_2, make_fad(2),    x)
         Jfd = DI.jacobian(ftall5_2, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(ftall5_2, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(ftall5_2, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(ftall5_2, pfa, make_fad(2), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
@@ -420,7 +460,9 @@ end
         pfd1 = DI.prepare_jacobian(ftall_bd1, make_fd_fwd(1), x1)
         pfd2 = DI.prepare_jacobian(ftall_bd2, make_fd_fwd(2), x2)
         Jfd1 = DI.jacobian(ftall_bd1, pfd1, make_fd_fwd(1), x1)
+        @test_opt DI.jacobian(ftall_bd1, pfd1, make_fd_fwd(1), x1)
         Jfd2 = DI.jacobian(ftall_bd2, pfd2, make_fd_fwd(2), x2)
+        @test_opt DI.jacobian(ftall_bd2, pfd2, make_fd_fwd(2), x2)
         for lane in 1:nlanes
             J1 = lane_jac(Jfd1, lane, nlanes, ny, nx, 1)
             J2 = lane_jac(Jfd2, lane, nlanes, ny, nx, 2)
@@ -453,7 +495,9 @@ end
         pfd = DI.prepare_jacobian(fwide1, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(fwide1, make_fad(1),    x)
         Jfd = DI.jacobian(fwide1, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(fwide1, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(fwide1, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(fwide1, pfa, make_fad(1), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -477,7 +521,9 @@ end
         pfd = DI.prepare_jacobian(fwide2, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(fwide2, make_fad(2),    x)
         Jfd = DI.jacobian(fwide2, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(fwide2, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(fwide2, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(fwide2, pfa, make_fad(2), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -497,7 +543,9 @@ end
         pfd = DI.prepare_jacobian(frow1, make_fd_cen(1), x)
         pfa = DI.prepare_jacobian(frow1, make_fad(1),    x)
         Jfd = DI.jacobian(frow1, pfd, make_fd_cen(1), x)
+        @test_opt DI.jacobian(frow1, pfd, make_fd_cen(1), x)
         Jfa = DI.jacobian(frow1, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(frow1, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 1)
@@ -512,7 +560,9 @@ end
         pfd = DI.prepare_jacobian(frow2, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(frow2, make_fad(2),    x)
         Jfd = DI.jacobian(frow2, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(frow2, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(frow2, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(frow2, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 2)
@@ -528,7 +578,9 @@ end
         pfd = DI.prepare_jacobian(fsum1, make_fd_cen(1), x)
         pfa = DI.prepare_jacobian(fsum1, make_fad(1),    x)
         Jfd = DI.jacobian(fsum1, pfd, make_fd_cen(1), x)
+        @test_opt DI.jacobian(fsum1, pfd, make_fd_cen(1), x)
         Jfa = DI.jacobian(fsum1, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(fsum1, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 1)
@@ -544,7 +596,9 @@ end
         pfd = DI.prepare_jacobian(fsum2, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(fsum2, make_fad(2),    x)
         Jfd = DI.jacobian(fsum2, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(fsum2, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(fsum2, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(fsum2, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 2)
@@ -563,7 +617,9 @@ end
         pfd1 = DI.prepare_jacobian(fwbd1, make_fd_fwd(1), x1)
         pfd2 = DI.prepare_jacobian(fwbd2, make_fd_fwd(2), x2)
         Jfd1 = DI.jacobian(fwbd1, pfd1, make_fd_fwd(1), x1)
+        @test_opt DI.jacobian(fwbd1, pfd1, make_fd_fwd(1), x1)
         Jfd2 = DI.jacobian(fwbd2, pfd2, make_fd_fwd(2), x2)
+        @test_opt DI.jacobian(fwbd2, pfd2, make_fd_fwd(2), x2)
         for lane in 1:nlanes
             J1 = lane_jac(Jfd1, lane, nlanes, ny, nx, 1)
             J2 = lane_jac(Jfd2, lane, nlanes, ny, nx, 2)
@@ -587,7 +643,9 @@ end
 
     @testset "jacobian (allocating)" begin
         Jfd = DI.jacobian(f, pfd, bfd, x)
+        @test_opt DI.jacobian(f, pfd, bfd, x)
         Jfa = DI.jacobian(f, pfa, bfa, x)
+        @test_opt DI.jacobian(f, pfa, bfa, x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 
@@ -595,6 +653,7 @@ end
         Jfd_ref = DI.jacobian(f, pfd, bfd, x)
         Jbuf = similar(Jfd_ref)
         DI.jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.jacobian!(f, Jbuf, pfd, bfd, x)
         Jfa = DI.jacobian(f, pfa, bfa, x)
         @test jac_ok(Jbuf, Jfa; atol=ATOL_FWD)
     end
@@ -603,12 +662,15 @@ end
         Jfd   = DI.jacobian(f, pfd, bfd, x)
         Jbuf  = similar(Jfd)
         DI.jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.jacobian!(f, Jbuf, pfd, bfd, x)
         @test Matrix(Jbuf) == Matrix(Jfd)
     end
 
     @testset "value_and_jacobian" begin
         y_fd, Jfd = DI.value_and_jacobian(f, pfd, bfd, x)
+        @test_opt DI.value_and_jacobian(f, pfd, bfd, x)
         y_fa, Jfa = DI.value_and_jacobian(f, pfa, bfa, x)
+        @test_opt DI.value_and_jacobian(f, pfa, bfa, x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         @test y_fd ≈ sin.(x)
     end
@@ -617,6 +679,7 @@ end
         Jfd_ref = DI.jacobian(f, pfd, bfd, x)
         Jbuf = similar(Jfd_ref)
         y_fd, _ = DI.value_and_jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.value_and_jacobian!(f, Jbuf, pfd, bfd, x)
         _, Jfa   = DI.value_and_jacobian(f, pfa, bfa, x)
         @test jac_ok(Jbuf, Jfa; atol=ATOL_FWD)
         @test y_fd ≈ sin.(x)
@@ -626,6 +689,7 @@ end
         Jfd1 = DI.jacobian(f, pfd, bfd, x)
         Jbuf = similar(Jfd1)
         DI.jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.jacobian!(f, Jbuf, pfd, bfd, x)
         DI.jacobian!(f, Jbuf, pfd, bfd, x)  # second call, same prep
         @test Matrix(Jbuf) ≈ Matrix(Jfd1)
     end
@@ -641,18 +705,24 @@ end
     pfa = DI.prepare_jacobian(f, bfa, x)
 
     @testset "jacobian" begin
-        @test jac_ok(DI.jacobian(f, pfd, bfd, x), DI.jacobian(f, pfa, bfa, x); atol=ATOL_CEN)
+        Jfd = DI.jacobian(f, pfd, bfd, x)
+        @test_opt DI.jacobian(f, pfd, bfd, x)
+        Jfa = DI.jacobian(f, pfa, bfa, x)
+        @test_opt DI.jacobian(f, pfa, bfa, x)
+        @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
     end
 
     @testset "jacobian!" begin
         Jref = DI.jacobian(f, pfd, bfd, x)
         Jbuf = similar(Jref)
         DI.jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.jacobian!(f, Jbuf, pfd, bfd, x)
         @test Matrix(Jbuf) ≈ Matrix(Jref)
     end
 
     @testset "value_and_jacobian" begin
         y_fd, Jfd = DI.value_and_jacobian(f, pfd, bfd, x)
+        @test_opt DI.value_and_jacobian(f, pfd, bfd, x)
         _, Jfa     = DI.value_and_jacobian(f, pfa, bfa, x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         @test y_fd ≈ x .^ 2
@@ -662,6 +732,7 @@ end
         Jref = DI.jacobian(f, pfd, bfd, x)
         Jbuf = similar(Jref)
         y_fd, _ = DI.value_and_jacobian!(f, Jbuf, pfd, bfd, x)
+        @test_opt DI.value_and_jacobian!(f, Jbuf, pfd, bfd, x)
         @test y_fd ≈ x .^ 2
         @test Matrix(Jbuf) ≈ Matrix(Jref)
     end
@@ -681,7 +752,9 @@ end
         pfd = DI.prepare_jacobian(f!, y, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f!, y, make_fad(1),    x)
         Jfd = DI.jacobian(f!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f!, y, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f!, y, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f!, y, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 
@@ -693,7 +766,9 @@ end
         pfd = DI.prepare_jacobian(f!, y, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f!, y, make_fad(2),    x)
         Jfd = DI.jacobian(f!, y, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f!, y, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f!, y, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f!, y, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
     end
 
@@ -706,6 +781,7 @@ end
         Jref = DI.jacobian(f!, y, pfd, make_fd_fwd(1), x)
         Jbuf = similar(Jref)
         DI.jacobian!(f!, y, Jbuf, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian!(f!, y, Jbuf, pfd, make_fd_fwd(1), x)
         @test Matrix(Jbuf) ≈ Matrix(Jref)
     end
 
@@ -717,7 +793,9 @@ end
         pfd = DI.prepare_jacobian(f!, y, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f!, y, make_fad(1),    x)
         y_fd, Jfd = DI.value_and_jacobian(f!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.value_and_jacobian(f!, y, pfd, make_fd_fwd(1), x)
         y_fa, Jfa = DI.value_and_jacobian(f!, y, pfa, make_fad(1),    x)
+        @test_opt DI.value_and_jacobian(f!, y, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 
@@ -730,6 +808,7 @@ end
         Jref = DI.jacobian(f!, y, pfd, make_fd_cen(2), x)
         Jbuf = similar(Jref)
         DI.value_and_jacobian!(f!, y, Jbuf, pfd, make_fd_cen(2), x)
+        @test_opt DI.value_and_jacobian!(f!, y, Jbuf, pfd, make_fd_cen(2), x)
         @test Matrix(Jbuf) ≈ Matrix(Jref)
     end
 
@@ -745,7 +824,9 @@ end
         pfd = DI.prepare_jacobian(ftall!, y, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(ftall!, y, make_fad(1),    x)
         Jfd = DI.jacobian(ftall!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(ftall!, y, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(ftall!, y, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(ftall!, y, pfa, make_fad(1), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -762,7 +843,9 @@ end
         pfd = DI.prepare_jacobian(fwide!, y, make_fd_fwd(2), x)
         pfa = DI.prepare_jacobian(fwide!, y, make_fad(2),    x)
         Jfd = DI.jacobian(fwide!, y, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(fwide!, y, pfd, make_fd_fwd(2), x)
         Jfa = DI.jacobian(fwide!, y, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(fwide!, y, pfa, make_fad(2), x)
         @test size(Jfd, 1) == nlanes * ny
         @test size(Jfd, 2) == nlanes * nx
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
@@ -783,7 +866,9 @@ end
         pfd = DI.prepare_jacobian(fc, make_fd_fwd(1), x, Constant(c))
         pfa = DI.prepare_jacobian(fc, make_fad(1),    x, Constant(c))
         Jfd = DI.jacobian(fc, pfd, make_fd_fwd(1), x, Constant(c))
+        @test_opt DI.jacobian(fc, pfd, make_fd_fwd(1), x, Constant(c))
         Jfa = DI.jacobian(fc, pfa, make_fad(1),    x, Constant(c))
+        @test_opt DI.jacobian(fc, pfa, make_fad(1), x, Constant(c))
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -799,7 +884,9 @@ end
         pfd = DI.prepare_jacobian(fc, make_fd_cen(2), x, Constant(c))
         pfa = DI.prepare_jacobian(fc, make_fad(2),    x, Constant(c))
         Jfd = DI.jacobian(fc, pfd, make_fd_cen(2), x, Constant(c))
+        @test_opt DI.jacobian(fc, pfd, make_fd_cen(2), x, Constant(c))
         Jfa = DI.jacobian(fc, pfa, make_fad(2),    x, Constant(c))
+        @test_opt DI.jacobian(fc, pfa, make_fad(2), x, Constant(c))
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -814,6 +901,7 @@ end
         for c in (1.0, 2.0, -0.5)
             pfd = DI.prepare_jacobian(fc, make_fd_fwd(1), x, Constant(c))
             Jfd = DI.jacobian(fc, pfd, make_fd_fwd(1), x, Constant(c))
+            @test_opt DI.jacobian(fc, pfd, make_fd_fwd(1), x, Constant(c))
             for lane in 1:nlanes
                 J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
                 @test diag(J) ≈ c .* cos.(x[lane,:])  atol=ATOL_FWD
@@ -830,7 +918,9 @@ end
         pfd = DI.prepare_jacobian(fc!, y, make_fd_fwd(1), x, Constant(c))
         pfa = DI.prepare_jacobian(fc!, y, make_fad(1),    x, Constant(c))
         Jfd = DI.jacobian(fc!, y, pfd, make_fd_fwd(1), x, Constant(c))
+        @test_opt DI.jacobian(fc!, y, pfd, make_fd_fwd(1), x, Constant(c))
         Jfa = DI.jacobian(fc!, y, pfa, make_fad(1),    x, Constant(c))
+        @test_opt DI.jacobian(fc!, y, pfa, make_fad(1), x, Constant(c))
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 end
@@ -847,6 +937,7 @@ end
         f(x) = sin.(x)
         p = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         J = DI.jacobian(f, p, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, p, make_fd_fwd(1), x)
         @test eltype(J) == Float32
     end
 
@@ -856,6 +947,7 @@ end
         f(x) = x .^ 2
         p = DI.prepare_jacobian(f, make_fd_cen(2), x)
         J = DI.jacobian(f, p, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, p, make_fd_cen(2), x)
         @test eltype(J) == Float32
     end
 
@@ -865,6 +957,7 @@ end
         f(x) = x .^ 2
         p = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         J = DI.jacobian(f, p, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, p, make_fd_fwd(1), x)
         # epsilon = sqrt(eps(Float32)) * ‖x_lane‖. For a 3-element lane with values ~1-4,
         # ‖x_lane‖ ≈ 4-5, so epsilon ≈ 1.5e-3. For f=x^2 the FD error equals epsilon exactly,
         # so atol must exceed the max expected epsilon across all lanes.
@@ -880,6 +973,7 @@ end
         f(x) = sin.(x)
         p = DI.prepare_jacobian(f, make_fd_fwd(2), x)
         J = DI.jacobian(f, p, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f, p, make_fd_fwd(2), x)
         for lane in 1:nlanes
             Jl = lane_jac(J, lane, nlanes, nx, nx, 2)
             @test Float32.(diag(Jl)) ≈ cos.(x[:,lane])  atol=1f-3
@@ -900,7 +994,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 
@@ -911,7 +1007,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
     end
 
@@ -922,7 +1020,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 1)
@@ -937,7 +1037,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, ny, nx, 2)
@@ -952,7 +1054,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfa = DI.prepare_jacobian(f, make_fad(1),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         Jfa = DI.jacobian(f, pfa, make_fad(1),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(1), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
     end
 
@@ -963,7 +1067,9 @@ end
         pfd = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfa = DI.prepare_jacobian(f, make_fad(2),    x)
         Jfd = DI.jacobian(f, pfd, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_cen(2), x)
         Jfa = DI.jacobian(f, pfa, make_fad(2),    x)
+        @test_opt DI.jacobian(f, pfa, make_fad(2), x)
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
     end
 
@@ -973,6 +1079,7 @@ end
         f(x) = sin.(x)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         J1  = DI.jacobian(f, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x)
         J2  = DI.jacobian(f, pfd, make_fd_fwd(1), x)
         @test Matrix(J1) == Matrix(J2)
     end
@@ -984,7 +1091,9 @@ end
         f(x) = sin.(x)
         pfd = DI.prepare_jacobian(f, make_fd_fwd(1), x1)
         J1  = DI.jacobian(f, pfd, make_fd_fwd(1), x1)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x1)
         J2  = DI.jacobian(f, pfd, make_fd_fwd(1), x2)
+        @test_opt DI.jacobian(f, pfd, make_fd_fwd(1), x2)
         @test !isapprox(Matrix(J1), Matrix(J2))
     end
 
@@ -999,6 +1108,7 @@ end
         end
         pfd = DI.prepare_jacobian(f109, make_fd_fwd(1), x)
         Jfd = DI.jacobian(f109, pfd, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f109, pfd, make_fd_fwd(1), x)
         @test nnz(Jfd) == nlanes * nx * ny
     end
 
@@ -1013,6 +1123,7 @@ end
         end
         pfd = DI.prepare_jacobian(f110, make_fd_fwd(2), x)
         Jfd = DI.jacobian(f110, pfd, make_fd_fwd(2), x)
+        @test_opt DI.jacobian(f110, pfd, make_fd_fwd(2), x)
         @test nnz(Jfd) == nlanes * nx * ny
     end
 end
@@ -1032,7 +1143,9 @@ end
         pfd1 = DI.prepare_jacobian(f, make_fd_fwd(1), x)
         pfd2 = DI.prepare_jacobian(f, make_fd_fwd(1), xp)
         J1   = DI.jacobian(f, pfd1, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(f, pfd1, make_fd_fwd(1), x)
         J2   = DI.jacobian(f, pfd2, make_fd_fwd(1), xp)
+        @test_opt DI.jacobian(f, pfd2, make_fd_fwd(1), xp)
         # Lane pi in J1 should equal lane i in J2 (since xp[i] == x[perm[i]])
         for (i, pi) in enumerate(perm)
             @test lane_jac(J1, pi, nlanes, nx, nx, 1) ≈
@@ -1049,7 +1162,9 @@ end
         pfd1 = DI.prepare_jacobian(f, make_fd_cen(2), x)
         pfd2 = DI.prepare_jacobian(f, make_fd_cen(2), xp)
         J1   = DI.jacobian(f, pfd1, make_fd_cen(2), x)
+        @test_opt DI.jacobian(f, pfd1, make_fd_cen(2), x)
         J2   = DI.jacobian(f, pfd2, make_fd_cen(2), xp)
+        @test_opt DI.jacobian(f, pfd2, make_fd_cen(2), xp)
         for (i, pi) in enumerate(perm)
             @test lane_jac(J1, pi, nlanes, nx, nx, 2) ≈
                   lane_jac(J2,  i, nlanes, nx, nx, 2)  atol=ATOL_CEN
@@ -1071,7 +1186,9 @@ end
         pfd1 = DI.prepare_jacobian(ftallp, make_fd_fwd(1), x)
         pfd2 = DI.prepare_jacobian(ftallp, make_fd_fwd(1), xp)
         J1   = DI.jacobian(ftallp, pfd1, make_fd_fwd(1), x)
+        @test_opt DI.jacobian(ftallp, pfd1, make_fd_fwd(1), x)
         J2   = DI.jacobian(ftallp, pfd2, make_fd_fwd(1), xp)
+        @test_opt DI.jacobian(ftallp, pfd2, make_fd_fwd(1), xp)
         for (i, pi) in enumerate(perm)
             @test lane_jac(J1, pi, nlanes, ny, nx, 1) ≈
                   lane_jac(J2,  i, nlanes, ny, nx, 1)  atol=ATOL_FWD
@@ -1101,6 +1218,7 @@ end
         end
         pfd = DI.prepare_jacobian(ftall_y!, y, make_fd_fwd(1), x)
         y_out, _ = DI.value_and_jacobian(ftall_y!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.value_and_jacobian(ftall_y!, y, pfd, make_fd_fwd(1), x)
         y_expected = copy(y); ftall_y!(y_expected, x)
         @test y_out ≈ y_expected
     end
@@ -1115,6 +1233,7 @@ end
         end
         pfd = DI.prepare_jacobian(fwide_y1!, y, make_fd_fwd(1), x)
         y_out, _ = DI.value_and_jacobian(fwide_y1!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.value_and_jacobian(fwide_y1!, y, pfd, make_fd_fwd(1), x)
         y_expected = copy(y); fwide_y1!(y_expected, x)
         @test y_out ≈ y_expected
     end
@@ -1130,6 +1249,7 @@ end
         end
         pfd = DI.prepare_jacobian(ftall_y2!, y, make_fd_fwd(2), x)
         y_out, _ = DI.value_and_jacobian(ftall_y2!, y, pfd, make_fd_fwd(2), x)
+        @test_opt DI.value_and_jacobian(ftall_y2!, y, pfd, make_fd_fwd(2), x)
         y_expected = copy(y); ftall_y2!(y_expected, x)
         @test y_out ≈ y_expected
     end
@@ -1144,6 +1264,7 @@ end
         end
         pfd = DI.prepare_jacobian(fwide_y2!, y, make_fd_fwd(2), x)
         y_out, _ = DI.value_and_jacobian(fwide_y2!, y, pfd, make_fd_fwd(2), x)
+        @test_opt DI.value_and_jacobian(fwide_y2!, y, pfd, make_fd_fwd(2), x)
         y_expected = copy(y); fwide_y2!(y_expected, x)
         @test y_out ≈ y_expected
     end
@@ -1155,6 +1276,7 @@ end
         f_sq!(y, x) = (y .= sin.(x))
         pfd = DI.prepare_jacobian(f_sq!, y, make_fd_fwd(1), x)
         y_out, _ = DI.value_and_jacobian(f_sq!, y, pfd, make_fd_fwd(1), x)
+        @test_opt DI.value_and_jacobian(f_sq!, y, pfd, make_fd_fwd(1), x)
         @test y_out ≈ sin.(x)
     end
 
@@ -1169,6 +1291,7 @@ end
         end
         pfd = DI.prepare_jacobian(ftall_cen!, y, make_fd_cen(1), x)
         y_out, _ = DI.value_and_jacobian(ftall_cen!, y, pfd, make_fd_cen(1), x)
+        @test_opt DI.value_and_jacobian(ftall_cen!, y, pfd, make_fd_cen(1), x)
         y_expected = copy(y); ftall_cen!(y_expected, x)
         @test y_out ≈ y_expected
     end
@@ -1196,7 +1319,9 @@ end
         pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
         pfa = DI.prepare_jacobian(fc, bfa, x, Constant(b))
         Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfd, bfd, x, Constant(b))
         Jfa = DI.jacobian(fc, pfa, bfa, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfa, bfa, x, Constant(b))
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -1213,7 +1338,9 @@ end
         pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
         pfa = DI.prepare_jacobian(fc, make_fad(1), x, Constant(b))
         Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfd, bfd, x, Constant(b))
         Jfa = DI.jacobian(fc, pfa, make_fad(1), x, Constant(b))
+        @test_opt DI.jacobian(fc, pfa, make_fad(1), x, Constant(b))
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 1)
@@ -1231,7 +1358,9 @@ end
         pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
         pfa = DI.prepare_jacobian(fc, bfa, x, Constant(b))
         Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfd, bfd, x, Constant(b))
         Jfa = DI.jacobian(fc, pfa, bfa, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfa, bfa, x, Constant(b))
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -1248,7 +1377,9 @@ end
         pfd = DI.prepare_jacobian(fc, bfd, x, Constant(b))
         pfa = DI.prepare_jacobian(fc, make_fad(2), x, Constant(b))
         Jfd = DI.jacobian(fc, pfd, bfd, x, Constant(b))
+        @test_opt DI.jacobian(fc, pfd, bfd, x, Constant(b))
         Jfa = DI.jacobian(fc, pfa, make_fad(2), x, Constant(b))
+        @test_opt DI.jacobian(fc, pfa, make_fad(2), x, Constant(b))
         @test jac_ok(Jfd, Jfa; atol=ATOL_CEN)
         for lane in 1:nlanes
             J = lane_jac(Jfd, lane, nlanes, nx, nx, 2)
@@ -1267,7 +1398,9 @@ end
         psc = DI.prepare_jacobian(fc, bfd, x, Constant(c_sc))
         par = DI.prepare_jacobian(fc, bfd, x, Constant(c_ar))
         Jsc = DI.jacobian(fc, psc, bfd, x, Constant(c_sc))
+        @test_opt DI.jacobian(fc, psc, bfd, x, Constant(c_sc))
         Jar = DI.jacobian(fc, par, bfd, x, Constant(c_ar))
+        @test_opt DI.jacobian(fc, par, bfd, x, Constant(c_ar))
         @test jac_ok(Jsc, Jar; atol=ATOL_FWD)
     end
 
@@ -1282,7 +1415,170 @@ end
         pfd = DI.prepare_jacobian(fc!, y, bfd, x, Constant(b))
         pfa = DI.prepare_jacobian(fc!, y, bfa, x, Constant(b))
         Jfd = DI.jacobian(fc!, y, pfd, bfd, x, Constant(b))
+        @test_opt DI.jacobian(fc!, y, pfd, bfd, x, Constant(b))
         Jfa = DI.jacobian(fc!, y, pfa, bfa, x, Constant(b))
+        @test_opt DI.jacobian(fc!, y, pfa, bfa, x, Constant(b))
         @test jac_ok(Jfd, Jfa; atol=ATOL_FWD)
+    end
+end
+
+# ============================================================================
+# Section 13: Cache context primal write-back
+#
+# Bug: after computing the Jacobian with AutoBatch{<:AutoFiniteDiff}, the
+# primal Cache in user-supplied contexts was not updated with values from the
+# expanded contexts_cache.  expand_contexts! tiled the cache into a larger
+# expanded cache and the function was evaluated once across all lanes
+# (primal + perturbed), writing results into the expanded cache.
+# rewrite_primal_cache! was missing, so the first chunk (primal block) of
+# the expanded cache was never written back to the user's Cache.
+#
+# Tests verify that after any jacobian variant, a Cache{<:AbstractArray}
+# context holds the primal evaluation result (not a perturbed value, and
+# not its pre-call contents).
+# ============================================================================
+
+@testset "Cache context primal write-back" begin
+
+    # Helper: f writes x.^2 to the cache, returns sin.(x).
+    # After jacobian the cache must contain x.^2 (primal), not zeros or
+    # the value at a perturbed input.
+
+    @testset "one-arg f, batchdim=1, forward" begin
+        nlanes, nx = 4, 3
+        x = randn(MersenneTwister(160), nlanes, nx) .+ 1.0
+        cache_data = zeros(nlanes, nx)
+        f(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_fwd(1)
+        pfd = DI.prepare_jacobian(f, bfd, x, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+    end
+
+    @testset "one-arg f, batchdim=2, forward" begin
+        nx, nlanes = 3, 4
+        x = randn(MersenneTwister(161), nx, nlanes) .+ 1.0
+        cache_data = zeros(nx, nlanes)
+        f(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_fwd(2)
+        pfd = DI.prepare_jacobian(f, bfd, x, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+    end
+
+    @testset "one-arg f, batchdim=1, central" begin
+        nlanes, nx = 5, 4
+        x = randn(MersenneTwister(162), nlanes, nx) .+ 1.0
+        cache_data = zeros(nlanes, nx)
+        f(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_cen(1)
+        pfd = DI.prepare_jacobian(f, bfd, x, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_CEN
+    end
+
+    @testset "one-arg f, batchdim=2, central" begin
+        nx, nlanes = 4, 5
+        x = randn(MersenneTwister(163), nx, nlanes) .+ 1.0
+        cache_data = zeros(nx, nlanes)
+        f(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_cen(2)
+        pfd = DI.prepare_jacobian(f, bfd, x, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_CEN
+    end
+
+    @testset "in-place f!, batchdim=1, forward" begin
+        nlanes, nx = 4, 3
+        x = randn(MersenneTwister(164), nlanes, nx) .+ 1.0
+        y = similar(x)
+        cache_data = zeros(nlanes, nx)
+        f!(y, x, c) = (c .= x .^ 2; y .= sin.(x))
+        bfd = make_fd_fwd(1)
+        pfd = DI.prepare_jacobian(f!, y, bfd, x, Cache(cache_data))
+        DI.jacobian(f!, y, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f!, y, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+    end
+
+    @testset "in-place f!, batchdim=2, central" begin
+        nx, nlanes = 3, 5
+        x = randn(MersenneTwister(165), nx, nlanes) .+ 1.0
+        y = similar(x)
+        cache_data = zeros(nx, nlanes)
+        f!(y, x, c) = (c .= x .^ 2; y .= sin.(x))
+        bfd = make_fd_cen(2)
+        pfd = DI.prepare_jacobian(f!, y, bfd, x, Cache(cache_data))
+        DI.jacobian(f!, y, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f!, y, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_CEN
+    end
+
+    @testset "all 4 DI variants: cache updated, batchdim=1, forward" begin
+        nlanes, nx = 4, 3
+        x = randn(MersenneTwister(166), nlanes, nx) .+ 1.0
+        f_vj(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_fwd(1)
+        cache_data = zeros(nlanes, nx)
+        pfd = DI.prepare_jacobian(f_vj, bfd, x, Cache(cache_data))
+        Jref = similar(DI.jacobian(f_vj, pfd, bfd, x, Cache(cache_data)))
+
+        fill!(cache_data, 0.0)
+        DI.jacobian(f_vj, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f_vj, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+
+        fill!(cache_data, 0.0)
+        DI.jacobian!(f_vj, Jref, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian!(f_vj, Jref, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+
+        fill!(cache_data, 0.0)
+        DI.value_and_jacobian(f_vj, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.value_and_jacobian(f_vj, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+
+        fill!(cache_data, 0.0)
+        DI.value_and_jacobian!(f_vj, Jref, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.value_and_jacobian!(f_vj, Jref, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ x .^ 2  atol=ATOL_FWD
+    end
+
+    @testset "cache holds primal value, not perturbed value, batchdim=1, forward" begin
+        # Regression test for the specific bug: exp.(x) is highly sensitive to
+        # perturbation, so primal ≠ exp.(x + ε) is easily detectable.
+        # Before the fix, the cache could remain stale or hold a perturbed value
+        # instead of the primal result.
+        nlanes, nx = 3, 2
+        x = randn(MersenneTwister(167), nlanes, nx) .+ 2.0
+        cache_data = zeros(nlanes, nx)
+        f(x, c) = (c .= exp.(x); x .^ 3)
+        bfd = make_fd_fwd(1)
+        pfd = DI.prepare_jacobian(f, bfd, x, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x, Cache(cache_data))
+        @test cache_data ≈ exp.(x)  atol=1e-6
+        # Perturbed value would be exp.(x .+ ε) ≈ exp.(x) .* (1 + ε),
+        # differing by ~ε*exp(2) ≈ 1e-6; atol above is tight enough to distinguish.
+    end
+
+    @testset "cache updated on repeated jacobian calls, batchdim=1, forward" begin
+        nlanes, nx = 4, 3
+        cache_data = zeros(nlanes, nx)
+        f(x, c) = (c .= x .^ 2; sin.(x))
+        bfd = make_fd_fwd(1)
+        x1 = randn(MersenneTwister(168), nlanes, nx) .+ 1.0
+        x2 = randn(MersenneTwister(169), nlanes, nx) .+ 2.0
+        pfd = DI.prepare_jacobian(f, bfd, x1, Cache(cache_data))
+        DI.jacobian(f, pfd, bfd, x1, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x1, Cache(cache_data))
+        @test cache_data ≈ x1 .^ 2  atol=ATOL_FWD
+        DI.jacobian(f, pfd, bfd, x2, Cache(cache_data))
+        @test_opt DI.jacobian(f, pfd, bfd, x2, Cache(cache_data))
+        @test cache_data ≈ x2 .^ 2  atol=ATOL_FWD
     end
 end
