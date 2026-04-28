@@ -12,6 +12,7 @@ using Accessors,
     FiniteDiff,
     ForwardDiff,
     LinearAlgebra,
+    Printf,
     StaticArrays,
     SparseArrays,
     SparseMatrixColorings

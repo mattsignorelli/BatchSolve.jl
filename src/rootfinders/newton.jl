@@ -10,6 +10,7 @@ function newton(
   prep=nothing, 
   batchdim::Union{Nothing,Integer}=nothing,
   solver=nothing,
+  verbose=false,
 )
     fc = DI.fix_tail(f, map(DI.unwrap, contexts)...)
     y = fc(x)
@@ -20,7 +21,7 @@ function newton(
     if isnothing(abstol)
       abstol = sqrt(eps(eltype(y)))
     end
-    return newton!(f!, y, copy(x), contexts...; reltol, abstol, maxiter, autodiff, prep, batchdim, solver)
+    return newton!(f!, y, copy(x), contexts...; reltol, abstol, maxiter, autodiff, prep, batchdim, solver, verbose)
 end
 
 """
@@ -54,6 +55,7 @@ function newton!(
   prep=nothing, 
   batchdim::Union{Nothing,Integer}=nothing,
   solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), # We do specialize on the solver tho
+  verbose=false,
   dx=zero.(x), # Temporary
 ) where {Y,X,T}
   if !isnothing(batchdim) && !(autodiff isa AutoBatch)
@@ -74,7 +76,7 @@ function newton!(
   end
   let _f! = f!, _prep = prep, _backend = autodiff
     val_and_jac!(_y, _jac, _x, _contexts...) = DI.value_and_jacobian!(_f!, _y, _jac, _prep, _backend, _x, _contexts...)
-    return newton!(val_and_jac!, y, jac, x, contexts...; reltol, abstol, maxiter, batchdim, solver, dx,)
+    return newton!(val_and_jac!, y, jac, x, contexts...; reltol, abstol, maxiter, batchdim, solver, dx, verbose)
   end
 end
 
@@ -91,6 +93,7 @@ function newton!(
   iters=isnothing(batchdim) ? nothing : similar(x, Int, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())), # If batch, then array that should be modified in-place with the iteration when convergence reached
   retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())),
   solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), 
+  verbose=false,
   dx=zero.(x),
 ) where {T}
   # Setup:
@@ -107,9 +110,16 @@ function newton!(
     out = merge(out, (; retcode=RETCODE_MAXITER, iters=0))
     # Newton:
     dx .= 0
+    if verbose
+      println("Iteration        norm(y)          norm(dx)")
+      println("-" ^ 45)
+    end
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
       solver(dx, jac, y)
+      if verbose
+        @printf("%-16d %-16.6e %-16.6e\n", iter, norm(y), norm(dx))
+      end
       if any(isnan.(dx))
         @reset out.retcode = RETCODE_FAILURE
         @reset out.iters = iter-1
@@ -137,10 +147,17 @@ function newton!(
     out = merge(out, (; retcode=retcode, iters=iters))
     # Newton:
     dx .= 0
+    if verbose
+      println("Batched-newton: printed norms are for entire batch")
+      println("Iteration        norm(y)          norm(dx)")
+      println("-" ^ 45)
+    end
     for iter in 1:maxiter
       val_and_jac!(y, jac, x, contexts...)
-      @show norm(y)
       solver(dx, jac, y)
+      if verbose
+        @printf("%-16d %-16.6e %-16.6e\n", iter, norm(y), norm(dx))
+      end
       out.retcode .= ifelse.(any(isnan, dx, dims=otherdim), RETCODE_FAILURE, out.retcode)
       out.iters .= ifelse.(
         (sum(abs2, y, dims=otherdim) .< abstol2 .|| out.retcode .== RETCODE_FAILURE) .&& out.iters .== -1,
