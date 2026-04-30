@@ -1,4 +1,4 @@
-struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG}
+struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T, J} <: DI.JacobianPrep{SIG}
   _sig::Val{SIG}
   batchdim::Int
   n_rows::Int
@@ -10,6 +10,7 @@ struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG
   absstep::A
   epsilon::E
   contexts_cache::T
+  jacscratch::J
 end
 
 fdjtype(::AutoFiniteDiff{fdt, fdjt}) where {fdt, fdjt} = fdjt
@@ -66,8 +67,10 @@ function _prepare_batch_jacobian_aux(
     end
   end
 
+  jacscratch = similar(y1, ny*nx*batchsize)
+
    _sig = DI.signature(f_or_f!y..., backend, x, contexts...; strict)
-  return BatchFiniteDiffJacobianPrep(_sig, batchdim, ny, nx, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache)
+  return BatchFiniteDiffJacobianPrep(_sig, batchdim, ny, nx, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache, jacscratch)
 end
 
 # Jacobian:
@@ -223,30 +226,24 @@ function compute_batch_fdj_jac!(
     # CSC layout for batchdim=1 (banded Jacobian):
     #   nzval reshaped to (ny, nlanes, nx) in col-major order, i.e.
     #   nzval_3d[out, lane, var] = J[lane,var,out]
-    #
-    # Strategy: wrap nzval_3d as PermutedDimsArray{(2,3,1)} to expose it with
-    #   the same (lane, var, out) index order as fwd_3d, then @. broadcast
-    #   the difference quotient directly in — zero allocations, single GPU kernel.
     # ------------------------------------------------------------------
+    jacscratch = reshape(prep.jacscratch, nlanes, nx, ny)
 
     fwd_3d    = reshape(@view(y1[(nlanes + 1):(nlanes*(nx + 1)), :]),
                         nlanes, nx, ny)          # (lane, var, out) — no-copy reshape
     eps_3d    = reshape(@view(epsilon[:, 1]),
                         nlanes, 1, 1)            # (lane, 1, 1)    — broadcast-ready
 
-    nzval_3d   = reshape(nzval, ny, nlanes, nx)
-    nzval_perm = PermutedDimsArray(nzval_3d, (2, 3, 1))  # view as (lane, var, out), no alloc
-
     if mode == Val{:central}
       rwd_3d = reshape(@view(y1[(nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1)), :]),
                        nlanes, nx, ny)
-      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
+      @. jacscratch = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
       primal_3d = reshape(@view(y1[1:nlanes, :]),
                           nlanes, 1, ny)         # (lane, 1, out) — broadcast-ready
-      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
+      @. jacscratch = (fwd_3d - primal_3d) / eps_3d
     end
-
+    permutedims!(reshape(nzval, ny, nlanes, nx), jacscratch, (3, 1, 2))
   else  # batchdim == 2
     # ------------------------------------------------------------------
     # y1 layout: shape (ny, nlanes*(1 + k*nx))
@@ -260,28 +257,27 @@ function compute_batch_fdj_jac!(
     # CSC layout for batchdim=2 (block-diagonal Jacobian):
     #   nzval reshaped to (ny, nx, nlanes) in col-major order, i.e.
     #   nzval_3d[out, var, lane] = J[out,var,lane]
-    #
-    # Strategy: same zero-alloc approach, wrap nzval_3d as PermutedDimsArray{(1,3,2)}
-    #   to expose it as (out, lane, var) matching fwd_3d.
     # ------------------------------------------------------------------
+    jacscratch = reshape(prep.jacscratch, ny, nlanes, nx)
 
     fwd_3d    = reshape(@view(y1[:, (nlanes + 1):(nlanes*(nx + 1))]),
                         ny, nlanes, nx)          # (out, lane, var) — no-copy reshape
     eps_3d    = reshape(@view(epsilon[1, :]),
                         1, nlanes, 1)            # (1, lane, 1)     — broadcast-ready
 
-    nzval_3d   = reshape(nzval, ny, nx, nlanes)
-    nzval_perm = PermutedDimsArray(nzval_3d, (1, 3, 2))  # view as (out, lane, var), no alloc
+    #nzval_3d   = reshape(nzval, ny, nx, nlanes)
+    #nzval_perm = PermutedDimsArray(nzval_3d, (1, 3, 2))  # view as (out, lane, var), no alloc
 
     if mode == Val{:central}
       rwd_3d = reshape(@view(y1[:, (nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1))]),
                        ny, nlanes, nx)
-      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
+      @. jacscratch = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
       primal_3d = reshape(@view(y1[:, 1:nlanes]),
                           ny, nlanes, 1)         # (out, lane, 1)  — broadcast-ready
-      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
+      @. jacscratch = (fwd_3d - primal_3d) / eps_3d
     end
+    permutedims!(reshape(nzval, ny, nx, nlanes), jacscratch, (1, 3, 2))
   end
 
   return jac
