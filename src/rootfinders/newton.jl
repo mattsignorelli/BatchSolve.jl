@@ -264,7 +264,6 @@ function newton!(
         out.iters
       )
       x .= x .+ (out.iters .== -1) .* dx
-      val_and_jac!(y, jac, x, contexts...)
       out.iters .= ifelse.(
         sum(abs2, dx, dims=otherdim) .< reltol2.*sum(abs2, x, dims=otherdim) .&& out.iters .== -1,
         iter,
@@ -274,6 +273,7 @@ function newton!(
       if all(out.retcode .!= RETCODE_MAXITER)
         break
       end
+      val_and_jac!(y, jac, x, contexts...)
     end
     return out
   end

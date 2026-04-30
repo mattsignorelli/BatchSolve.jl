@@ -40,7 +40,7 @@ function make_pattern(
   d_mat = similar(y, Bool, nnz)
   copyto!(d_rows, rows)
   copyto!(d_cols, cols)
-  d_mat .= 1
+  d_mat .= true
   pattern = sparse(d_rows, d_cols, d_mat, batchsize*n_rows, batchsize*n_cols)
   return pattern
 end
