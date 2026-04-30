@@ -1,4 +1,4 @@
-struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG}
+struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T, J} <: DI.JacobianPrep{SIG}
   _sig::Val{SIG}
   batchdim::Int
   n_rows::Int
@@ -10,6 +10,7 @@ struct BatchFiniteDiffJacobianPrep{SIG, X, Y, R, A, E, T} <: DI.JacobianPrep{SIG
   absstep::A
   epsilon::E
   contexts_cache::T
+  jacscratch::J
 end
 
 fdjtype(::AutoFiniteDiff{fdt, fdjt}) where {fdt, fdjt} = fdjt
@@ -66,26 +67,28 @@ function _prepare_batch_jacobian_aux(
     end
   end
 
+  jacscratch = similar(y1, ny*nx*batchsize)
+
    _sig = DI.signature(f_or_f!y..., backend, x, contexts...; strict)
-  return BatchFiniteDiffJacobianPrep(_sig, batchdim, ny, nx, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache)
+  return BatchFiniteDiffJacobianPrep(_sig, batchdim, ny, nx, batchsize, x1, y1, relstep, absstep, epsilon, contexts_cache, jacscratch)
 end
 
 # Jacobian:
-@generated function set_contexts!(contexts_cache::T1, contexts::T2, batchdim) where {T1<:Tuple,T2<:Tuple}
+@generated function expand_contexts!(contexts_cache::T1, contexts::T2, batchdim) where {T1<:Tuple,T2<:Tuple}
   N = length(T1.parameters)
   @assert N == length(T2.parameters) "Length of contexts_cache and contexts tuple disagree."
   exprs = [
-    :(_context_lower!(Base.getfield(contexts_cache, $i), Base.getfield(contexts, $i), batchdim)) 
+    :(_remake_expanded!(Base.getfield(contexts_cache, $i), Base.getfield(contexts, $i), batchdim)) 
   for i in 1:N ]
   return :(tuple($(exprs...)))
 end
 
-function _context_lower!(context_cache::Context, context::Context, batchdim)
-  return DI.maker(context_cache)(_set_context!(DI.unwrap(context_cache), DI.unwrap(context), batchdim))
+function _remake_expanded!(context_cache::Context, context::Context, batchdim)
+  return DI.maker(context_cache)(_expand_context!(DI.unwrap(context_cache), DI.unwrap(context), batchdim))
 end
 
-_set_context!(context_cache_data, context_data, batchdim) = context_data
-function _set_context!(context_cache_data::AbstractArray, context_data::AbstractArray, batchdim)
+_expand_context!(context_cache_data, context_data, batchdim) = context_data
+function _expand_context!(context_cache_data::AbstractArray, context_data::AbstractArray, batchdim)
   chunksize = size(context_data, batchdim)
   nx = size(context_data, mod(batchdim, 2) + 1)
   reps = div(size(context_cache_data, batchdim), chunksize)
@@ -95,26 +98,50 @@ function _set_context!(context_cache_data::AbstractArray, context_data::Abstract
   return context_cache_data
 end
 
+# To rewrite primals of expanded Cache in contexts_cache back to Cache:
+@generated function rewrite_primal_cache!(contexts::T1, contexts_cache::T2,  batchdim) where {T1<:Tuple,T2<:Tuple}
+  N = length(T1.parameters)
+  @assert N == length(T2.parameters) "Length of contexts and contexts_cache tuple disagree."
+  exprs = [
+    :(_write_cache!(Base.getfield(contexts, $i), Base.getfield(contexts_cache, $i), batchdim)) 
+  for i in 1:N ]
+  return :($(exprs...); return nothing)
+end
+
+_write_cache!(constant_or_nonexpanded_cache::Any, ::Any, ::Any) = constant_or_nonexpanded_cache
+function _write_cache!(cache::Cache{<:AbstractArray}, expanded_cache::Cache{<:AbstractArray}, batchdim)
+  chunksize = size(DI.unwrap(cache), batchdim)
+  nx = size(DI.unwrap(cache), mod(batchdim, 2) + 1)
+  DI.unwrap(cache) .= view(DI.unwrap(expanded_cache), ntuple(j -> j == batchdim ? (1:chunksize) : (1:nx), Val{2}())...)
+  return nothing
+end
+
 function _value_and_jacobian_aux!(
-    f_or_f!y::FY, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x,
+    f_or_f!y::FY, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts,
   ) where {FY}
   set_batch_fdj_input!(x, prep, backend)
   if length(f_or_f!y) == 1
     f = f_or_f!y[1]
     prep.y1 .= f(prep.x1)
     # Allocate result:
-    batchdim = prep.batchdim
-    otherdim = mod(batchdim, 2) + 1
-    y = prep.y1[ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...]
+    _batchdim = prep.batchdim
+    _otherdim = mod(_batchdim, 2) + 1
+    let batchdim=_batchdim, batchsize=size(x, _batchdim), ny=size(prep.y1, _otherdim)
+      y = prep.y1[ntuple(i ->i == batchdim ? (1:batchsize) : (1:ny), Val{2}())...]
+    end
   else
     f! = f_or_f!y[1]
     y = f_or_f!y[2]
     f!(prep.y1, prep.x1)
-    batchdim = prep.batchdim
-    otherdim = mod(batchdim, 2) + 1
-    y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:size(x, batchdim)) : 1:size(prep.y1, otherdim), Val{2}())...)
+    _batchdim = prep.batchdim
+    _otherdim = mod(_batchdim, 2) + 1
+    let batchdim=_batchdim, batchsize=size(x, _batchdim), ny=size(prep.y1, _otherdim)
+      y .= view(prep.y1, ntuple(i -> i == batchdim ? (1:batchsize) : (1:ny), Val{2}())...)
+    end
+    # Also write the contexts with the contexts_cache primal values:
   end
   compute_batch_fdj_jac!(jac, prep, backend)
+  rewrite_primal_cache!(contexts, prep.contexts_cache, _batchdim)
   return y, jac
 end
 
@@ -199,30 +226,24 @@ function compute_batch_fdj_jac!(
     # CSC layout for batchdim=1 (banded Jacobian):
     #   nzval reshaped to (ny, nlanes, nx) in col-major order, i.e.
     #   nzval_3d[out, lane, var] = J[lane,var,out]
-    #
-    # Strategy: wrap nzval_3d as PermutedDimsArray{(2,3,1)} to expose it with
-    #   the same (lane, var, out) index order as fwd_3d, then @. broadcast
-    #   the difference quotient directly in — zero allocations, single GPU kernel.
     # ------------------------------------------------------------------
+    jacscratch = reshape(prep.jacscratch, nlanes, nx, ny)
 
     fwd_3d    = reshape(@view(y1[(nlanes + 1):(nlanes*(nx + 1)), :]),
                         nlanes, nx, ny)          # (lane, var, out) — no-copy reshape
     eps_3d    = reshape(@view(epsilon[:, 1]),
                         nlanes, 1, 1)            # (lane, 1, 1)    — broadcast-ready
 
-    nzval_3d   = reshape(nzval, ny, nlanes, nx)
-    nzval_perm = PermutedDimsArray(nzval_3d, (2, 3, 1))  # view as (lane, var, out), no alloc
-
     if mode == Val{:central}
       rwd_3d = reshape(@view(y1[(nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1)), :]),
                        nlanes, nx, ny)
-      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
+      @. jacscratch = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
       primal_3d = reshape(@view(y1[1:nlanes, :]),
                           nlanes, 1, ny)         # (lane, 1, out) — broadcast-ready
-      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
+      @. jacscratch = (fwd_3d - primal_3d) / eps_3d
     end
-
+    permutedims!(reshape(nzval, ny, nlanes, nx), jacscratch, (3, 1, 2))
   else  # batchdim == 2
     # ------------------------------------------------------------------
     # y1 layout: shape (ny, nlanes*(1 + k*nx))
@@ -236,28 +257,27 @@ function compute_batch_fdj_jac!(
     # CSC layout for batchdim=2 (block-diagonal Jacobian):
     #   nzval reshaped to (ny, nx, nlanes) in col-major order, i.e.
     #   nzval_3d[out, var, lane] = J[out,var,lane]
-    #
-    # Strategy: same zero-alloc approach, wrap nzval_3d as PermutedDimsArray{(1,3,2)}
-    #   to expose it as (out, lane, var) matching fwd_3d.
     # ------------------------------------------------------------------
+    jacscratch = reshape(prep.jacscratch, ny, nlanes, nx)
 
     fwd_3d    = reshape(@view(y1[:, (nlanes + 1):(nlanes*(nx + 1))]),
                         ny, nlanes, nx)          # (out, lane, var) — no-copy reshape
     eps_3d    = reshape(@view(epsilon[1, :]),
                         1, nlanes, 1)            # (1, lane, 1)     — broadcast-ready
 
-    nzval_3d   = reshape(nzval, ny, nx, nlanes)
-    nzval_perm = PermutedDimsArray(nzval_3d, (1, 3, 2))  # view as (out, lane, var), no alloc
+    #nzval_3d   = reshape(nzval, ny, nx, nlanes)
+    #nzval_perm = PermutedDimsArray(nzval_3d, (1, 3, 2))  # view as (out, lane, var), no alloc
 
     if mode == Val{:central}
       rwd_3d = reshape(@view(y1[:, (nlanes*(nx + 1) + 1):(nlanes*(2*nx + 1))]),
                        ny, nlanes, nx)
-      @. nzval_perm = (fwd_3d - rwd_3d) / (2 * eps_3d)
+      @. jacscratch = (fwd_3d - rwd_3d) / (2 * eps_3d)
     else  # :forward
       primal_3d = reshape(@view(y1[:, 1:nlanes]),
                           ny, nlanes, 1)         # (out, lane, 1)  — broadcast-ready
-      @. nzval_perm = (fwd_3d - primal_3d) / eps_3d
+      @. jacscratch = (fwd_3d - primal_3d) / eps_3d
     end
+    permutedims!(reshape(nzval, ny, nx, nlanes), jacscratch, (1, 3, 2))
   end
 
   return jac
@@ -269,38 +289,38 @@ function DI.jacobian!(
     f::F, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.jacobian(
     f::F, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.value_and_jacobian(
     f::F, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)
 end
 
 function DI.value_and_jacobian!(
     f::F, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc = DI.fix_tail(f, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc,), jac, prep, backend, x, contexts)
 end
 
 
@@ -310,36 +330,36 @@ function DI.jacobian!(
     f!::F, y, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.jacobian(
     f!::F, y, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)[2]
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)[2]
 end
 
 function DI.value_and_jacobian(
     f!::F, y, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
   jac = similar(sparsity_pattern(prep), eltype(prep.y1))
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)
 end
 
 function DI.value_and_jacobian!(
     f!::F, y, jac, prep::BatchFiniteDiffJacobianPrep, backend::AutoBatch{<:AutoFiniteDiff}, x, contexts::Vararg{DI.Context, C},
   ) where {F, C}
   DI.check_prep(f!, y, prep, backend, x, contexts...)
-  set_contexts!(prep.contexts_cache, contexts, backend.batchdim)
+  expand_contexts!(prep.contexts_cache, contexts, backend.batchdim)
   fc! = DI.fix_tail(f!, map(DI.unwrap, prep.contexts_cache)...)
-  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x)
+  return _value_and_jacobian_aux!((fc!, y), jac, prep, backend, x, contexts)
 end

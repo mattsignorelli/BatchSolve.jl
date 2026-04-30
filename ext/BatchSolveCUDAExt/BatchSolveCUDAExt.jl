@@ -19,14 +19,14 @@ function newton_solver(device::CUDA.CUDABackend, _y, _x, batchdim::Integer)
     _pivot = CUDA.zeros(Int32, _n, _batchsize)
     _info = CUDA.zeros(Int32, _batchsize)
     _jacscratch = CUDA.zeros(eltype(_y), _n, _n, _batchsize)
-
-    let pivot=_pivot, info=_info, batchsize=_batchsize, n=_n, jacscratch=_jacscratch
+    _rhs = CUDA.zeros(eltype(_y), _n, 1, _batchsize)
+    let pivot=_pivot, info=_info, batchsize=_batchsize, n=_n, jacscratch=_jacscratch, rhs=_rhs
       return (dx, jac, y)-> begin
         jacsratch .= reshape(jac.nzVal, n, n, batchsize)
-        ys = reshape(y, n, 1, batchsize)
+        rhs .= reshape(y, n, 1, batchsize)
         CUBLAS.getrf_strided_batched!(jacscratch, pivot, info)
-        CUBLAS.getrs_strided_batched!('N', jacscratch, ys, pivot)
-        dx .= reshape(ifelse.(reshape(info, 1, batchsize) .!= 0, NaN32, -reshape(y, n, batchsize)), :)
+        CUBLAS.getrs_strided_batched!('N', jacscratch, rhs, pivot)
+        dx .= reshape(ifelse.(reshape(info, 1, batchsize) .!= 0, NaN32, -reshape(rhs, n, batchsize)), :)
       end
     end
   elseif batchdim == 1
@@ -36,8 +36,9 @@ function newton_solver(device::CUDA.CUDABackend, _y, _x, batchdim::Integer)
     _info = CUDA.zeros(Int32, _batchsize)
     _jacscratch = CUDA.zeros(eltype(_y), _n, _n, _batchsize)
     _rhs = CUDA.zeros(eltype(_y), _n, 1, _batchsize)
+    _rhs_perm = CUDA.zeros(eltype(_y), _batchsize, 1, _n)
 
-    let pivot=_pivot, info=_info, batchsize=_batchsize, n=_n, jacscratch=_jacscratch, rhs=_rhs
+    let pivot=_pivot, info=_info, batchsize=_batchsize, n=_n, jacscratch=_jacscratch, rhs=_rhs, rhs_perm=_rhs_perm
       return (dx, jac, y) -> begin
         nzval_3d = reshape(jac.nzVal, n, batchsize, n)  # (n_rows, batchsize, n_cols)
         permutedims!(jacscratch, nzval_3d, (1, 3, 2))  # → (n_rows, n_cols, batchsize)
@@ -46,9 +47,9 @@ function newton_solver(device::CUDA.CUDABackend, _y, _x, batchdim::Integer)
         CUBLAS.getrf_strided_batched!(jacscratch, pivot, info)
         CUBLAS.getrs_strided_batched!('N', jacscratch, rhs, pivot)
         # Now need to permutedims back
-        permutedims!(reshape(y, batchsize, 1, n), rhs, (3, 2, 1))
+        permutedims!(rhs_perm, rhs, (3, 2, 1))
         # ready to go
-        dx .= ifelse.(reshape(info, batchsize, 1) .!= 0, NaN32, -reshape(y, batchsize, n))
+        dx .= ifelse.(reshape(info, batchsize, 1) .!= 0, NaN32, -reshape(rhs_perm, batchsize, n))
       end
     end
   else

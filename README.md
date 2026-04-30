@@ -43,9 +43,12 @@ sol = newton(f_vectorized, zeros(10000), Constant(1:10000), batchdim=1, autodiff
 
 The returned object is a `NamedTuple` with the fields:
 - `u`: an array with size equal to the input array, containing the inputs at the roots
+- `f`: an array with size equal to the output array, containing the outputs at the roots (should be zero for converged inputs)
 - `jac`: a (sparse) matrix storing the Jacobian for the entire batched-system at the last iteration
 - `retcode`: an array of return codes for each element in the batch, where `0x0` is success, `0x1` is failure, and `0x2` means the maximum number of iterations was reached
 - `iters`: an array storing the number of iterations until convergence for each element in the batch
+
+To observe the newton iteration while it is running, set the `verbose` keyword argument to `true`.
 
 Of course, `BatchSolve.jl` is not limited to only 1D functions. Consider this example:
 
@@ -99,11 +102,8 @@ While the example shown above uses the broadcast operators with GPU arrays, you 
 
 This package also features special bindings for [`FiniteDiff.jl`](https://github.com/JuliaDiff/FiniteDiff.jl) with `AutoBatch` to accelerate finite differences calculations for vectorized functions: if a function is vectorized, then instead of evaluating the same function many times for each tangent, we can just evaluate it a single time for all tangents. This can offer massive speedups in the case where your function is extremely expensive to evaluate.
 
-Here is a simple example that shows approximately a **250,000x speedup** of vectorized vs non-vectorized finite differences on the GPU. First, consider 1,000 different 1D systems:
-<img width="2074" height="802" alt="image" src="https://github.com/user-attachments/assets/9360b246-b705-4530-95aa-560d9c4eecaf" />
-We see that `AutoBatch` already achieves a ~3600x speedup for the `value_and_jacobian` step, and the preparation step is also much faster. However, because the GPU function is vectorized, the runtime is basically unchanged for `AutoBatch` if we scale this up to 100,000 1D systems:
+Here is a simple example:
 <img width="2074" height="418" alt="image" src="https://github.com/user-attachments/assets/d5d1e08b-87bf-4ac6-88f2-5222099abe24" />
-The preparation step is also still very fast. For just naively using `AutoSparse(AutoFiniteDiff())`, the preparation step took far too long for us to wait for. Hence if we just scale up the 13.75s we saw for only 1,000 1D systems up to 100,000, and compare with the runtime for `AutoBatch(AutoFiniteDiff())`, we see approximately a **250,000x speedup**.
 
 
 ## Should you NOT use this package?
