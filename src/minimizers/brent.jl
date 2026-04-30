@@ -1,3 +1,31 @@
+"""
+    brent(g, x, contexts...; xa, xb, tol, maxiter, check_every) -> NamedTuple
+
+Finds the minimum of the vectorized function `g` over `[xa[i], xb[i]]` for each `x[i]`
+using Brent's method.
+
+# Arguments
+- `g`: Objective function called as `g(x, unwrapped_contexts...)`. Must accept
+  and return arrays on the same device as `x`.
+- `x`: Initial guess **array** (`x` cannot be a `Number`!); device is inferred from this.
+- `contexts`: Optional `Constant` or `Cache` objects, or plain values, forwarded to `g`.
+
+# Keyword Arguments
+- `xa`: Array of lower bounds (same length as `x`).
+- `xb`: Array of upper bounds (same length as `x`).
+- `tol`: Convergence tolerance; default `eltype(x)(1e-13)`.
+- `maxiter`: Maximum iterations; default `500`.
+- `check_every`: Iterations between convergence checks; default `1`. Higher
+  values reduce host–device sync overhead on GPU. Set to `0` to skip mid-loop
+  checks (a final check always runs on return).
+
+# Returns
+A `NamedTuple` with fields:
+- `u`: Minimizer (`x`, mutated in-place).
+- `f`: Objective value at the minimizer (`y`, mutated in-place).
+- `iters`: Per-element iteration count at convergence (`-1` if not converged).
+- `retcode`: `RETCODE_SUCCESS` or `RETCODE_MAXITER` per element.
+"""
 function brent(g, x::AbstractArray, contexts...; xa, xb, tol=eltype(x)(1e-13), maxiter=500, check_every=1)
   # Brent doesn't use derivatives so parse either
   if contexts isa Tuple{Vararg{Context}}
@@ -10,6 +38,34 @@ function brent(g, x::AbstractArray, contexts...; xa, xb, tol=eltype(x)(1e-13), m
   return brent!(g!, y, copy(x), contexts...; xa, xb, tol, maxiter, check_every)
 end
 
+"""
+    brent!(g!, y, x, contexts...; xa, xb, tol, maxiter, check_every) -> NamedTuple
+
+In-place Brent minimizer. Same as `brent` but mutates `y` and `x` directly,
+avoiding allocation. `x` holds the minimizer on return.
+
+# Arguments
+- `g!`: In-place objective `g!(y, x, contexts...)`, mutating `y`.
+- `y`: Objective-value array (mutated).
+- `x`: Initial guess (mutated; holds the solution on return).
+- `contexts`: Optional context objects or plain values forwarded to `g!`.
+
+# Keyword Arguments
+- `xa`: Array of lower bounds (same length as `x`).
+- `xb`: Array of upper bounds (same length as `x`).
+- `tol`: Convergence tolerance; default `eltype(x)(1e-13)`.
+- `maxiter`: Maximum iterations; default `500`.
+- `check_every`: Iterations between convergence checks; default `1`. Higher
+  values reduce host–device sync overhead on GPU. Set to `0` to skip mid-loop
+  checks (a final check always runs on return).
+
+# Returns
+A `NamedTuple` with fields:
+- `u`: Minimizer (`x`, mutated in-place).
+- `f`: Objective value at the minimizer (`y`, mutated in-place).
+- `iters`: Per-element iteration count at convergence (`-1` if not converged).
+- `retcode`: `RETCODE_SUCCESS` or `RETCODE_MAXITER` per element.
+"""
 function brent!(
   g!::Function,
   y::AbstractArray,
@@ -32,19 +88,70 @@ function brent!(
 end
 
 """
-    brent(g, xa, xb; tol, maxiter, check_every) -> (xmax, gmax, converged)
+    _brent!(g!, y, x; xa, xb, tol, maxiter, check_every, iters, retcode) -> NamedTuple
 
-Find the minimum of vectorized `g` over `[xa[i], xb[i]]` for each element i.
+Core fully-vectorized Brent minimization loop. Finds the minimum of `g!` over
+`[xa[i], xb[i]]` for every element `i` simultaneously, with no scalar indexing.
+Implemented as a `@generated` function to ensure compile-time constant folding of
+`CGOLD` and `eps(T)` for `Float32` GPU compatibility.
 
-`g` must accept xa vector input and return xa vector of the same backend.
+All operations are broadcast (`@.`) so the implementation is device-agnostic
+(CPU, CUDA, Metal, etc.). There is no `batchdim` argument because the method is
+inherently one-dimensional: every element is its own independent 1-D search.
 
-`check_every`: iterations between convergence checks (default 1). Higher
-values reduce host-sync overhead on GPU for expensive `g`.
-Set to 0 to skip mid-loop checks (one final check always runs at return).
+# Arguments
+- `g!`: Two-argument in-place callable `g!(y, x)` - contexts already captured.
+- `y`: Objective-value array (mutated in-place). Must satisfy
+  `length(xa) == length(xb) == length(x) == length(y)`.
+- `x`: Iterate array (mutated in-place; holds the minimizer on return).
 
-DOES NOT SUPPORT SCALAR EVALUATION!
+# Keyword Arguments
+- `xa`: Lower bounds array.
+- `xb`: Upper bounds array.
+- `tol`: Convergence tolerance used in the stopping criterion
+  `|x - mid| ≤ 2·tol·|x| + ε`; default `T(1e-13)`.
+- `maxiter`: Maximum number of Brent iterations per element; default `500`.
+- `check_every`: Number of iterations between mid-loop convergence checks.
+  Set to `0` to skip all mid-loop checks (one final check always runs on return).
+  Higher values reduce host–device synchronisation overhead on GPU when `g!` is
+  expensive; default `1`.
+- `iters`: Pre-allocated `Int` array (same shape as `x`) in which the iteration
+  index at convergence is recorded per element. Allocated automatically by default.
+- `retcode`: Pre-allocated `UInt8` array (same shape as `x`) for per-element return
+  codes. Allocated automatically by default.
 
-Note no batchdim here because 1D so any direction is used
+# Algorithm
+Implements the classical Brent (1973) minimization algorithm, extended to operate on
+entire arrays without branching:
+
+1. **Initialisation** — the golden-section point `xa + CGOLD·(xb - xa)` is used as
+   the starting iterate, where `CGOLD = (3 - √5) / 2 ≈ 0.382`.
+2. **Parabolic interpolation** — on each iteration a parabola is fit through the
+   three best points `(x, w, v)`. The parabolic step is accepted when it falls
+   inside the bracket and is smaller than half the step from two iterations ago
+   (the standard Brent acceptance criteria).
+3. **Golden-section fallback** — when the parabolic step is rejected the algorithm
+   takes a golden-section step into the larger sub-interval.
+4. **Edge guard** — if the accepted trial point would land within `2·tol1` of a
+   bracket endpoint, it is shifted to exactly `±tol1` from the current best point.
+5. **Bracket & point update** — `(xa, xb)` and the three auxiliary points
+   `(x, w, v)` are updated in fully-masked broadcast expressions so that converged
+   lanes are never modified.
+
+# Scratch arrays
+Ten `T`-valued and five `Bool`-valued temporary arrays are allocated once before the
+loop. They are reused across iterations (and across logical roles within a single
+iteration) to minimise allocation. See inline comments in the source for the reuse
+map.
+
+# Returns
+A `NamedTuple` with fields:
+- `u`: Minimizer array (`x`, mutated in-place).
+- `f`: Objective value at the minimizer (`y`, mutated in-place).
+- `iters`: Per-element iteration count at convergence (`Int` array; `-1` for
+  elements that did not converge).
+- `retcode`: Per-element return code (`UInt8` array):
+  `RETCODE_SUCCESS` if converged, `RETCODE_MAXITER` if not.
 """
 @generated function _brent!(
   g!::Function,

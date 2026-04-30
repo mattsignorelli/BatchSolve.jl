@@ -48,6 +48,8 @@ The returned object is a `NamedTuple` with the fields:
 - `retcode`: an array of return codes for each element in the batch, where `0x0` is success, `0x1` is failure, and `0x2` means the maximum number of iterations was reached
 - `iters`: an array storing the number of iterations until convergence for each element in the batch
 
+To observe the newton iteration while it is running, set the `verbose` keyword argument to `true`.
+
 Of course, `BatchSolve.jl` is not limited to only 1D functions. Consider this example:
 
 ```julia
