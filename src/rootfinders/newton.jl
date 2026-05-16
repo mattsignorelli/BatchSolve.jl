@@ -315,7 +315,7 @@ function newton_solver(device, _y, _x, batchdim)
   if isnothing(batchdim)
     let lx=_lx, ly=_ly
       return (dx, jac, y)->begin
-        if ArrayInterface.issingular(jac)
+        if ArrayInterface.issingular(jac) || any(isnan, jac) || any(isinf, jac)
           dx .= NaN32
         else
           reshape(dx, lx) .= -jac \ reshape(y, ly)
@@ -333,7 +333,7 @@ function newton_solver(device, _y, _x, batchdim)
           curjac = reshape(view(jac.nzval, (jac_offset+1):(jac_offset+jacsize)), (n_rows, n_cols))
           dx_offset = (i-1)*n_cols
           y_offset = (i-1)*n_rows
-          if ArrayInterface.issingular(curjac)
+          if ArrayInterface.issingular(curjac) || any(isnan, curjac) || any(isinf, curjac)
             view(dx, (dx_offset+1):(dx_offset+n_cols)) .= NaN32
           else
             view(dx, (dx_offset+1):(dx_offset+n_cols)) .= -curjac \ view(y, (y_offset+1):(y_offset+n_rows))
@@ -348,7 +348,7 @@ function newton_solver(device, _y, _x, batchdim)
       return (dx, jac::SparseMatrixCSC, y)->begin
         for i in 1:batchsize
           curjac = view(reshape(jac.nzval, n_rows, :), :, i:batchsize:xlen)
-          if ArrayInterface.issingular(curjac)
+          if ArrayInterface.issingular(curjac) || any(isnan, curjac) || any(isinf, curjac)
             view(dx, i:batchsize:xlen) .= NaN32
           else
             view(dx, i:batchsize:xlen) .= -curjac \ view(y, i:batchsize:ylen)
