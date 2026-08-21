@@ -17,7 +17,7 @@ using Accessors,
     SparseArrays,
     SparseMatrixColorings
 
-export Constant, Cache, ConstantOrCache, Context
+export Constant, Cache, ConstantOrCache
 export AutoBatch
 export newton, newton!, brent, brent!
 
