@@ -1,6 +1,6 @@
 module BatchSolve
 import DifferentiationInterface as DI
-using DifferentiationInterface: Constant, Cache, ConstantOrCache, Context
+using DifferentiationInterface: Constant, Cache, ConstantOrCache, Context, AutoForwardFromPrimitive
 using FiniteDiff: default_relstep, compute_epsilon
 using ADTypes: dense_ad
 import KernelAbstractions as KA
