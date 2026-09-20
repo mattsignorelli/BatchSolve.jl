@@ -47,8 +47,8 @@ function make_linear_solver(device::CUDA.CUDABackend, _b, _x, batchdim::Integer)
         error("CUDA batched linear solver not yet implemented for underdetermined (n_output < n_input) systems")
       end
       _info = CUDA.zeros(Cint, _batchsize)
-      _Ascratch = similar(_y, _n_rows, _n_cols, _batchsize)
-      _rhs = similar(_y, _n_rows, 1, _batchsize)
+      _Ascratch = similar(_b, _n_rows, _n_cols, _batchsize)
+      _rhs = similar(_b, _n_rows, 1, _batchsize)
       let info=_info, batchsize=_batchsize, n_rows=_n_rows, n_cols=_n_cols, Ascratch=_Ascratch, rhs=_rhs, nan=_nan
         return (x, A, b) -> begin
           nzval_3d = reshape(A.nzVal, n_rows, batchsize, n_cols)  # (n_rows, batchsize, n_cols)
