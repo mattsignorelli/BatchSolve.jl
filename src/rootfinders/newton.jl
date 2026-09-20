@@ -21,8 +21,8 @@ Finds roots of `f(x, contexts...) = 0` using Newton's method.
   `nothing` (default) it is created automatically on the first call.
 - `batchdim`: Batch dimension index (`1`, `2`, or `nothing`). When set, independent
   Newton systems are solved in parallel along that dimension; default `nothing`.
-- `solver`: Callable `(dx, jac, y) -> ()` that solves the linear system in-place.
-  Defaults to `newton_solver(device, y, x, batchdim)`.
+- `solver`: Callable `(x, A, b) -> x` that solves the (batched) linear system `Ax=b` in-place.
+  Defaults to `make_linear_solver(device, y, x, batchdim)`.
 - `verbose`: Print iteration table (iteration, ‖y‖, ‖dx‖) when `true`; default `false`.
 
 # Returns
@@ -51,7 +51,7 @@ function newton(
     y = fc(x)
     f!(_y, _x, _contexts...) = (_y .= f(_x, _contexts...); _y)
     if isnothing(solver)
-      solver = newton_solver(KA.get_backend(x), y, x, batchdim)
+      solver = make_linear_solver(KA.get_backend(x), y, x, batchdim)
     end
     if isnothing(abstol)
       abstol = sqrt(eps(eltype(y)))
@@ -81,7 +81,7 @@ backend, allocates the Jacobian matrix, then delegates to the three-argument
   `AutoForwardDiff()`. Wraps in `AutoBatch` automatically when `batchdim` is set.
 - `prep`: Pre-allocated Jacobian preparation object; created automatically when `nothing`.
 - `batchdim`: Batch dimension (`1`, `2`, or `nothing`); default `nothing`.
-- `solver`: Linear solver callable; defaults to `newton_solver(device, y, x, batchdim)`.
+- `solver`: Linear solver callable; defaults to `make_linear_solver(device, y, x, batchdim)`.
 - `verbose`: Print iteration table (iteration, ‖y‖, ‖dx‖) when `true`; default `false`.
 - `dx`: Pre-allocated Newton step buffer; default `zero.(x)`.
 
@@ -105,7 +105,7 @@ function newton!(
   autodiff=KA.get_backend(x) isa KA.GPU ? AutoForwardFromPrimitive(AutoForwardDiff()) : AutoForwardDiff(),
   prep=nothing, 
   batchdim::Union{Nothing,Integer}=nothing,
-  solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), # We do specialize on the solver tho
+  solver::T=make_linear_solver(KA.get_backend(x), y, x, batchdim), # We do specialize on the solver tho
   verbose=false,
   dx=zero.(x), # Temporary
 ) where {Y,X,T}
@@ -157,7 +157,7 @@ Supports both scalar (unbatched) and batched operation.
 - `retcode`: `UInt8` array (same shape as `iters`) recording the per-problem return code.
   Allocated automatically when `batchdim` is set.
 - `solver`: Linear solver `(dx, jac, y) -> nothing`; defaults to
-  `newton_solver(device, y, x, batchdim)`.
+  `make_linear_solver(device, y, x, batchdim)`.
 - `verbose`: Print per-iteration `(iter, ‖y‖, ‖dx‖)` table; default `false`.
 - `dx`: Pre-allocated Newton step buffer; default `zero.(x)`.
 
@@ -190,7 +190,7 @@ function newton!(
   batchdim::Union{Nothing,Integer}=nothing, 
   iters=isnothing(batchdim) ? nothing : similar(x, Int, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())), # If batch, then array that should be modified in-place with the iteration when convergence reached
   retcode=isnothing(batchdim) ? nothing : similar(x, UInt8, ntuple(i-> i == batchdim ? size(x, batchdim) : 1, Val{2}())),
-  solver::T=newton_solver(KA.get_backend(x), y, x, batchdim), 
+  solver::T=make_linear_solver(KA.get_backend(x), y, x, batchdim), 
   verbose=false,
   dx=zero.(x),
 ) where {T}
@@ -214,7 +214,7 @@ function newton!(
     end
     val_and_jac!(y, jac, x, contexts...)
     for iter in 1:maxiter
-      solver(dx, jac, y)
+      solver(dx, jac, -y)
       if verbose
         @printf("%-11d %-16.6e %-16.6e\n", iter, norm(y), norm(dx))
       end
@@ -253,7 +253,7 @@ function newton!(
     end
     val_and_jac!(y, jac, x, contexts...)
     for iter in 1:maxiter
-      solver(dx, jac, y)
+      solver(dx, jac, -y)
       if verbose
         @printf("%-11d %-16.6e %-16.6e\n", iter, norm(y), norm(dx))
       end
@@ -276,87 +276,5 @@ function newton!(
       val_and_jac!(y, jac, x, contexts...)
     end
     return out
-  end
-end 
-
-"""
-    newton_solver(device, y, x, batchdim) -> Function
-
-Construct and return a linear-system solver callable compatible with the given device,
-array shapes, and batch configuration. The returned function has the signature
-
-    solver(dx, jac, y) -> nothing
-
-and solves `jac * dx = -y` in-place, writing the Newton step into `dx`.
-
-# Arguments
-- `device`: KernelAbstractions backend (e.g. `CPU()`, `CUDABackend()`). 
-- `y`: Prototype residual array (used for size introspection; not mutated).
-- `x`: Prototype solution array (used for size introspection; not mutated).
-- `batchdim`: Batch dimension (`nothing`, `1`, or `2`).
-
-# Returned solver behaviour
-| `batchdim` | Jacobian type | Behaviour |
-|------------|---------------|-----------|
-| `nothing`  | dense matrix  | Single `jac \\ y` solve; writes `NaN` when `jac` is singular. |
-| `2`        | `SparseMatrixCSC` (block-diagonal, blocks contiguous in `nzval`) | Iterates over batch index `i`, extracts each `(n_rows × n_cols)` block from `nzval`, solves independently. |
-| `1`        | `SparseMatrixCSC` (interleaved columns) | Iterates over batch index `i`, gathers every `batchsize`-th column, solves independently. |
-
-Singular sub-Jacobians (detected via `ArrayInterface.issingular`) result in `NaN` being
-written to the corresponding slice of `dx` so that upstream code can detect and handle
-failures gracefully.
-
-# Errors
-Throws an `ArgumentError`-style error if `batchdim ∉ {nothing, 1, 2}`.
-"""
-function newton_solver(device, _y, _x, batchdim)
-  _lx = length(_x)
-  _ly = length(_y)
-  if isnothing(batchdim)
-    let lx=_lx, ly=_ly
-      return (dx, jac, y)->begin
-        if ArrayInterface.issingular(jac) || any(isnan, jac) || any(isinf, jac)
-          dx .= NaN32
-        else
-          reshape(dx, lx) .= -jac \ reshape(y, ly)
-        end
-      end
-    end
-  elseif batchdim == 2 # Do each serially
-    _batchsize = size(_x, 2)
-    _n_rows = size(_y, 1)
-    _n_cols = size(_x, 1)
-    let n_rows=_n_rows, n_cols=_n_cols, batchsize=_batchsize, jacsize=_n_rows*_n_cols
-      return (dx, jac::SparseMatrixCSC, y)->begin
-        for i in 1:batchsize
-          jac_offset = (i-1)*jacsize 
-          curjac = reshape(view(jac.nzval, (jac_offset+1):(jac_offset+jacsize)), (n_rows, n_cols))
-          dx_offset = (i-1)*n_cols
-          y_offset = (i-1)*n_rows
-          if ArrayInterface.issingular(curjac) || any(isnan, curjac) || any(isinf, curjac)
-            view(dx, (dx_offset+1):(dx_offset+n_cols)) .= NaN32
-          else
-            view(dx, (dx_offset+1):(dx_offset+n_cols)) .= -curjac \ view(y, (y_offset+1):(y_offset+n_rows))
-          end
-        end
-      end
-    end
-  elseif batchdim == 1
-    _batchsize = size(_x, 1)
-    _n_rows = size(_y, 2)
-    let n_rows=_n_rows, batchsize=_batchsize, xlen=length(_x), ylen=length(_y)
-      return (dx, jac::SparseMatrixCSC, y)->begin
-        for i in 1:batchsize
-          curjac = view(reshape(jac.nzval, n_rows, :), :, i:batchsize:xlen)
-          if ArrayInterface.issingular(curjac) || any(isnan, curjac) || any(isinf, curjac)
-            view(dx, i:batchsize:xlen) .= NaN32
-          else
-            view(dx, i:batchsize:xlen) .= -curjac \ view(y, i:batchsize:ylen)
-          end
-        end
-      end
-    end
-  else
-    error("Invalid batchdim (must be either 1, 2, or nothing)")
   end
 end
