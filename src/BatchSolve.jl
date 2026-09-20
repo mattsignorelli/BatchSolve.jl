@@ -26,6 +26,7 @@ const RETCODE_SUCCESS = 0x0
 const RETCODE_FAILURE = 0x1
 const RETCODE_MAXITER = 0x2
 
+include("linear_solver.jl")
 include("batch-ad/utils.jl")
 include("batch-ad/autobatch.jl")
 include("batch-ad/finitediff.jl")
