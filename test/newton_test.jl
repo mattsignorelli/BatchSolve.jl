@@ -456,33 +456,33 @@ end
 end
 
 # ===========================================================================
-# 46-50: linear_solver CPU closures
+# 46-50: make_linear_solver CPU closures
 # ===========================================================================
 
-@testset "46. linear_solver(nothing) solves J*dx=-y" begin
+@testset "46. make_linear_solver(nothing) solves J*dx=-y" begin
     y  = [3.0; 4.0]
     J  = [2.0 0.0; 0.0 4.0]
     dx = zeros(2)
-    solve! = BatchSolve.linear_solver(nothing, y, zeros(2), nothing)
+    solve! = BatchSolve.make_linear_solver(nothing, y, zeros(2), nothing)
     solve!(dx, J, -y)
     @test dx ≈ [-1.5; -1.0]
 end
 
-@testset "47. linear_solver batchdim=1: two 1x1 systems" begin
+@testset "47. make_linear_solver batchdim=1: two 1x1 systems" begin
     y  = [4.0; 6.0]
     J  = sparse([1, 2], [1, 2], [2.0, 3.0], 2, 2)
     dx = zeros(2)
-    solve! = BatchSolve.linear_solver(nothing, reshape(y, 2, 1), reshape(zeros(2), 2, 1), 1)
+    solve! = BatchSolve.make_linear_solver(nothing, reshape(y, 2, 1), reshape(zeros(2), 2, 1), 1)
     solve!(dx, J, -y)
     @test dx[1] ≈ -2.0
     @test dx[2] ≈ -2.0
 end
 
-@testset "48. linear_solver batchdim=2: two 1x1 systems" begin
+@testset "48. make_linear_solver batchdim=2: two 1x1 systems" begin
     y  = [4.0; 6.0]
     J  = sparse([1, 2], [1, 2], [2.0, 3.0], 2, 2)
     dx = zeros(2)
-    solve! = BatchSolve.linear_solver(nothing, reshape(y, 1, 2), reshape(zeros(2), 1, 2), 2)
+    solve! = BatchSolve.make_linear_solver(nothing, reshape(y, 1, 2), reshape(zeros(2), 1, 2), 2)
     solve!(dx, J, -y)
     @test dx[1] ≈ -2.0
     @test dx[2] ≈ -2.0
@@ -492,7 +492,7 @@ end
     y  = [1.0; 2.0]
     J  = sparse([1, 2], [1, 2], [0.0, 2.0], 2, 2)
     dx = zeros(2)
-    solve! = BatchSolve.linear_solver(nothing, reshape(y, 2, 1), reshape(zeros(2), 2, 1), 1)
+    solve! = BatchSolve.make_linear_solver(nothing, reshape(y, 2, 1), reshape(zeros(2), 2, 1), 1)
     solve!(dx, J, -y)
     @test isnan(dx[1])
     @test dx[2] ≈ -1.0
@@ -502,7 +502,7 @@ end
     y  = [1.0; 2.0]
     J  = sparse([1, 2], [1, 2], [0.0, 2.0], 2, 2)
     dx = zeros(2)
-    solve! = BatchSolve.linear_solver(nothing, reshape(y, 1, 2), reshape(zeros(2), 1, 2), 2)
+    solve! = BatchSolve.make_linear_solver(nothing, reshape(y, 1, 2), reshape(zeros(2), 1, 2), 2)
     solve!(dx, J, -y)
     @test isnan(dx[1])
     @test dx[2] ≈ -1.0
