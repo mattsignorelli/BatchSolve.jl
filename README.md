@@ -88,11 +88,12 @@ Implemented batched solvers include:
 
 ### Root Finders
 - Newton-Raphson `newton` (uses derivatives)
+- COMING SOON: Levenberg-Marquardt 
 
 ### Minimizers
 - 1D Brent's method `brent`
-- COMING SOON: Differential evolution `de`
-- COMING SOON: Genetic algorithm `ga`
+
+Note: For batch-parallelizable genetic algorithms, see [Metaheuristics.jl](https://github.com/jmejia8/Metaheuristics.jl).
  
 ## Data Structures, SIMD, and which `batchdim`?
 
