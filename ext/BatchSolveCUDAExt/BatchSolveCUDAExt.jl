@@ -79,7 +79,7 @@ function make_linear_solver(device::CUDA.CUDABackend, _b, _x, batchdim::Integer)
           rhs .= reshape(b, n, 1, batchsize)
           CUBLAS.getrf_strided_batched!(Ascratch, pivot, info)
           CUBLAS.getrs_strided_batched!('N', Ascratch, rhs, pivot)
-          x .= reshape(ifelse.(reshape(info, 1, batchsize) .!= 0, nan, reshape(rhs, n, batchsize)), :)
+          x .= ifelse.(reshape(info, 1, batchsize) .!= 0, nan, reshape(rhs, n, batchsize))
           return x
         end
       end
