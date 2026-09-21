@@ -52,7 +52,8 @@ A `NamedTuple` with fields:
 - `u`: Solution array (same object as `x`, mutated in-place).
 - `f`: Final residual (same object as `y`, mutated in-place).
 - `jac`: Final Jacobian.
-- `retcode`: `RETCODE_SUCCESS`, `RETCODE_FAILURE` (non-finite residual/Jacobian), or
+- `retcode`: `RETCODE_SUCCESS`, `RETCODE_FAILURE` (non-finite residual/Jacobian at the current
+  point, or steps still being rejected with the damping already at `damping_max`), or
   `RETCODE_MAXITER`, per batch element (scalar when `batchdim=nothing`). `RETCODE_SUCCESS`
   means converged to a root *or* a stationary point of `‖f‖²`; inspect `f` if you need to
   distinguish them.
@@ -206,10 +207,13 @@ See [`levenberg_marquardt`](@ref). Additionally:
    `ρ = (‖y‖² - ‖y_trial‖²) / (dxᵀ(λ D dx - g))`.
 4. Accept the step where `ρ > accept_ratio` and the trial cost is finite; `x` is updated with
    `ifelse`, so rejected/non-finite trial points never contaminate `x`.
-5. Update `λ ← λ max(1/3, 1 - (2ρ-1)³)`, `ν ← 2` on acceptance, else `λ ← λν`, `ν ← 2ν`.
-6. Elements whose step is small relative to `x` (`reltol`) are marked converged.
-7. If any element accepted a step the Jacobian is re-evaluated (at unchanged `x` for the
-   others, which is harmless).
+5. If any element accepted a step, re-evaluate residual and Jacobian (at unchanged `x` for the
+   others, which is harmless). Accepted steps whose new residual or Jacobian is non-finite are
+   rolled back to the previous `x` and counted as rejected (one extra evaluation, only when
+   this happens). A non-finite residual/Jacobian at the *initial* point is a failure.
+6. Update `λ ← λ max(1/3, 1 - (2ρ-1)³)`, `ν ← 2` on acceptance, else `λ ← λν`, `ν ← 2ν`.
+7. Elements whose (finite, evaluated) step is small relative to `x` (`reltol`) are marked
+   converged; elements rejected while `λ == damping_max` are marked failed.
 
 For `batchdim=nothing` the same code runs with a single "lane", and `JᵀJ` is formed with `mul!`.
 Sparse Jacobians are only supported together with `batchdim`.
@@ -279,6 +283,7 @@ function levenberg_marquardt!(
   v_shape = bd == 1 ? (1, B, n) : (1, n, B) # a per-variable quantity along J's column dimension
   y_shape = bd == 1 ? (m, B, 1) : (m, 1, B) # residual aligned with J's row dimension
   cdim = bd == 1 ? 3 : 2                    # J's column (variable) dimension
+  jdims = bd == 1 ? (1, 3) : (1, 2)         # all of J's dimensions except the batch one
 
   as2(a) = batched ? a : reshape(a, :, 1)   # 2D "natural" view; unbatched → (n, 1)
 
@@ -294,12 +299,13 @@ function levenberg_marquardt!(
   D = similar(x)                 # Marquardt damping scale
   rhs = similar(x)
   xt = similar(x)                # trial point
+  xs = similar(x)                # saved iterate, to roll back a step whose new point is unusable
   yt = similar(y)                # residual at trial point
   ycan = bd == 1 ? similar(y, m, B) : nothing
   eye = similar(x, FT, n, n)
   copyto!(eye, Matrix{FT}(I, n, n))
 
-  x2, y2, dx2, g2, D2, Dsq2, rhs2, xt2, yt2 = map(as2, (x, y, dx, g, D, Dsq, rhs, xt, yt))
+  x2, y2, dx2, g2, D2, Dsq2, rhs2, xt2, yt2, xs2 = map(as2, (x, y, dx, g, D, Dsq, rhs, xt, yt, xs))
   gv = reshape(g, v_shape)
   Dsqv = reshape(Dsq, v_shape)
   Dv = reshape(D, v_shape)
@@ -315,6 +321,7 @@ function levenberg_marquardt!(
   ν = similar(x, FT, lane_shape)
   fill!(ν, twoT)
   λv = reshape(λ, lane3)
+  rollback = similar(x, Bool, lane_shape)
 
   if verbose
     batched && println("Batched-LM: printed norms are for entire batch")
@@ -365,8 +372,11 @@ function levenberg_marquardt!(
       mul!(A, transpose(jac), jac)
     end
     @. D = clamp(Dsq, dmin, dmax)
-    @. Hv += λv * Iv * Dv                            # add λ D to the diagonal, per problem
-    @. rhs = -g
+    # Add λ D to the diagonal, per problem. Finished/failed problems get an identity block and a
+    # zero right-hand side instead, so the linear solver never sees their (possibly NaN) data.
+    act3 = reshape(active, lane3)
+    @. Hv = ifelse(act3, Hv + λv * Iv * Dv, Iv)
+    @. rhs = ifelse(active, -g, zeroT)
     solver(dx, A, rhs)
 
     # ── 3. Trial point and gain ratio ──────────────────────────────────────────────────────
@@ -381,27 +391,44 @@ function levenberg_marquardt!(
     ρ = @. ifelse(pred > zeroT, (cost - costt) / pred, -oneT)
     accept = @. use & isfinite(costt) & (ρ > ρmin)
 
-    # ── 4. Masked updates ──────────────────────────────────────────────────────────────────
+    # ── 4. Accept, then verify the new point ───────────────────────────────────────────────
+    copyto!(xs, x)                                   # saved so unusable steps can be undone
+    fill!(rollback, false)
     @. x2 = ifelse(accept, xt2, x2)
+    if any(accept)
+      val_and_jac!(y, jac, x, contexts...)
+      # A step is only kept if the residual AND Jacobian at the new point are finite. Otherwise
+      # it is rolled back and counted as a rejection (so damping grows below).
+      jok = reshape(all(isfinite, Jv; dims=jdims), lane_shape)
+      yok = all(isfinite, y2; dims=od)
+      @. rollback = accept & !(jok & yok)
+      if any(rollback)
+        @. x2 = ifelse(rollback, xs2, x2)
+        @. accept = accept & !rollback
+        val_and_jac!(y, jac, x, contexts...)         # restore y, jac at the rolled-back x
+      end
+    end
+
+    # ── 5. Damping update (rejected = not accepted, incl. rolled-back steps) ───────────────
+    trial_ok = @. use & isfinite(costt)              # the step and its residual were finite
+    atmax = @. active & !accept & (λ >= λmax)        # rejected although damping was already maximal
     @. λ = ifelse(active,
       clamp(ifelse(accept, λ * max(thirdT, oneT - (2ρ - oneT)^3), λ * ν), λmin, λmax),
       λ)
     @. ν = ifelse(active, ifelse(accept, twoT, min(twoT * ν, νmax)), ν)
 
-    # ── 5. Step-size convergence ───────────────────────────────────────────────────────────
+    # ── 6. Step-size convergence / stalling ────────────────────────────────────────────────
+    # A tiny step only counts as convergence if it was actually evaluated: a step that is tiny
+    # merely because repeated non-finite trials inflated λ is not convergence.
     dxn = sum(abs2, dx2; dims=od)
     xn = sum(abs2, x2; dims=od)
-    small = @. active & (dxn <= (reltol * (sqrt(xn) + reltol))^2)
-    @. retcode = ifelse(small, RETCODE_SUCCESS, retcode)
-    @. iters = ifelse(small, iter, iters)
+    small = @. active & trial_ok & !rollback & (dxn <= (reltol * (sqrt(xn) + reltol))^2)
+    stalled = @. atmax & !small
+    @. retcode = ifelse(small, RETCODE_SUCCESS, ifelse(stalled, RETCODE_FAILURE, retcode))
+    @. iters = ifelse(small | stalled, iter, iters)
 
     if verbose
       @printf("%-11d %-16.6e %-16.6e %-16.6e\n", iter, sqrt(sum(cost)), norm(dx), maximum(λ))
-    end
-
-    # ── 6. Refresh residual + Jacobian, only needed if some problem moved ──────────────────
-    if any(accept)
-      val_and_jac!(y, jac, x, contexts...)
     end
   end
 
