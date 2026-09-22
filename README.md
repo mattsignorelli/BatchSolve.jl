@@ -88,10 +88,10 @@ Implemented batched solvers include:
 
 ### Root Finders
 - Newton-Raphson `newton` (uses derivatives)
+- Levenberg-Marquardt `levenberg_marquardt` (uses derivatives)
 
 ### Minimizers
 - 1D Brent's method `brent`
-- COMING SOON: Levenberg-Marquardt 
 
 Note: For batch-parallelizable genetic algorithms, see [Metaheuristics.jl](https://github.com/jmejia8/Metaheuristics.jl).
  
