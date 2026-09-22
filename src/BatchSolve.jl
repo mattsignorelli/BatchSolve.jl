@@ -19,7 +19,7 @@ using Accessors,
 
 export Constant, Cache, ConstantOrCache
 export AutoBatch
-export newton, newton!, brent, brent!
+export newton, newton!, brent, brent!, levenberg_marquardt, levenberg_marquardt!
 
 # Wish I could use Enum but not GPU compatible.
 const RETCODE_SUCCESS = 0x0
@@ -31,6 +31,7 @@ include("batch-ad/utils.jl")
 include("batch-ad/autobatch.jl")
 include("batch-ad/finitediff.jl")
 include("rootfinders/newton.jl")
+include("rootfinders/levenberg_marquardt.jl")
 include("minimizers/brent.jl")
 
 end
