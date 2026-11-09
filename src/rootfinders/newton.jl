@@ -41,7 +41,7 @@ function newton(
   abstol=nothing, 
   maxiter=100, 
   # On GPU need to use ForwardDiff from primitive (pushforward) for no scalar indexing
-  autodiff=KA.get_backend(x) isa KA.GPU ? AutoForwardFromPrimitive(AutoForwardDiff()) : AutoForwardDiff(),
+  autodiff=!(KA.get_backend(x) isa KA.CPU) ? AutoForwardFromPrimitive(AutoForwardDiff()) : AutoForwardDiff(),
   prep=nothing, 
   batchdim::Union{Nothing,Integer}=nothing,
   solver=nothing,
@@ -102,7 +102,7 @@ function newton!(
   abstol=sqrt(eps(eltype(y))), 
   maxiter=100, 
   # On GPU need to use ForwardDiff from primitive (pushforward) for no scalar indexing
-  autodiff=KA.get_backend(x) isa KA.GPU ? AutoForwardFromPrimitive(AutoForwardDiff()) : AutoForwardDiff(),
+  autodiff=!(KA.get_backend(x) isa KA.CPU) ? AutoForwardFromPrimitive(AutoForwardDiff()) : AutoForwardDiff(),
   prep=nothing, 
   batchdim::Union{Nothing,Integer}=nothing,
   solver::T=make_linear_solver(KA.get_backend(x), y, x, batchdim), # We do specialize on the solver tho
