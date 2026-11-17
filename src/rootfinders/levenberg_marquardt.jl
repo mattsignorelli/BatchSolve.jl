@@ -1,7 +1,7 @@
 """
     levenberg_marquardt(f, x, contexts...; reltol, abstol, gradtol, maxiter, autodiff, prep,
                         batchdim, solver, verbose, damping, damping_min, damping_max,
-                        accept_ratio, diagmin, diagmax)
+                        accept_ratio, diagmin, diagmax, lower, upper, maxstep, trial_jac)
 
 Minimizes `‖f(x, contexts...)‖²` (finds roots of `f(x, contexts...) = 0` when a root exists)
 using the Levenberg–Marquardt method. Unlike [`newton`](@ref), the residual may have a
@@ -46,6 +46,21 @@ solver.
   this value; default `1e-4`.
 - `diagmin`, `diagmax`: `diag(JᵀJ)` is clamped to `[diagmin, diagmax]` to form the Marquardt
   damping scale `D`; defaults `1e-6`, `1e16`.
+- `lower`, `upper`: Bounds on the unknowns (a number, or an array of the shape of `x`, so that
+  every batch element may have its own); default `nothing` (no bounds). The initial `x` must
+  lie within them. Every trial point is clamped to the bounds, and an unknown that sits on a
+  bound while the gradient points out of the bounds is held there for that step (it does not
+  enter the linear system). A problem then converges to the minimum of `‖f‖²` within the
+  bounds; `gradtol` applies to the unknowns that are not held.
+- `maxstep`: Largest change of each unknown in one step (a number, or an array of the shape of
+  `x`); default `nothing`. A longer step is shortened as a whole, keeping its direction.
+- `trial_jac`: If `true`, the Jacobian is evaluated together with the residual at every trial
+  point, and an accepted step takes both from there. By default only the residual is evaluated
+  at a trial point, and the residual and Jacobian are evaluated again after the step is
+  accepted. `trial_jac=true` saves that second evaluation for every accepted step, at the cost
+  of a wasted Jacobian for every rejected one and of a second Jacobian buffer: use it when the
+  residual costs about as much as the residual with the Jacobian (e.g. when both come from
+  one differentiated calculation). Default `false`.
 
 # Returns
 A `NamedTuple` with fields:
@@ -80,6 +95,10 @@ function levenberg_marquardt(
   accept_ratio=1e-4,
   diagmin=1e-6,
   diagmax=1e16,
+  lower=nothing,
+  upper=nothing,
+  maxstep=nothing,
+  trial_jac=false,
 )
     fc = DI.fix_tail(f, map(DI.unwrap, contexts)...)
     y = fc(x)
@@ -96,7 +115,8 @@ function levenberg_marquardt(
     end
     return levenberg_marquardt!(f!, y, copy(x), contexts...;
       reltol, abstol, gradtol, maxiter, autodiff, prep, batchdim, solver, verbose,
-      damping, damping_min, damping_max, accept_ratio, diagmin, diagmax)
+      damping, damping_min, damping_max, accept_ratio, diagmin, diagmax,
+      lower, upper, maxstep, trial_jac)
 end
 
 """
@@ -143,6 +163,10 @@ function levenberg_marquardt!(
   accept_ratio=1e-4,
   diagmin=1e-6,
   diagmax=1e16,
+  lower=nothing,
+  upper=nothing,
+  maxstep=nothing,
+  trial_jac=false,
 ) where {Y,X,T}
   if !isnothing(batchdim) && !(autodiff isa AutoBatch)
     autodiff = AutoBatch(autodiff; batchdim=batchdim)
@@ -166,7 +190,8 @@ function levenberg_marquardt!(
     val_and_jac!(_y, _jac, _x, _contexts...) = DI.value_and_jacobian!(_f!, _y, _jac, _prep, _backend, _x, _contexts...)
     return levenberg_marquardt!(val!, val_and_jac!, y, jac, x, contexts...;
       reltol, abstol, gradtol, maxiter, batchdim, solver, dx, verbose,
-      damping, damping_min, damping_max, accept_ratio, diagmin, diagmax)
+      damping, damping_min, damping_max, accept_ratio, diagmin, diagmax,
+      lower, upper, maxstep, trial_jac)
   end
 end
 
@@ -215,6 +240,15 @@ See [`levenberg_marquardt`](@ref). Additionally:
 7. Elements whose (finite, evaluated) step is small relative to `x` (`reltol`) are marked
    converged; elements rejected while `λ == damping_max` are marked failed.
 
+With `lower`/`upper`, an unknown on a bound whose gradient points out of the bounds is held
+(its row and column of the normal equations are replaced by the identity and its right-hand
+side by zero), the trial point is clamped to the bounds, and with `maxstep` the step is
+shortened. The gain ratio then uses the reduction predicted by the linear model for the step
+actually taken, `‖y‖² - ‖y + J dx‖²` (equal to `dxᵀ(λ D dx - g)` for the unmodified step).
+With `trial_jac`, step 3 evaluates residual and Jacobian at the trial point into second
+buffers, a step is only accepted if both are finite, and step 5 copies them (so there is no
+re-evaluation and no rollback).
+
 For `batchdim=nothing` the same code runs with a single "lane", and `JᵀJ` is formed with `mul!`.
 Sparse Jacobians are only supported together with `batchdim`.
 
@@ -244,6 +278,10 @@ function levenberg_marquardt!(
   accept_ratio=1e-4,
   diagmin=1e-6,
   diagmax=1e16,
+  lower=nothing,
+  upper=nothing,
+  maxstep=nothing,
+  trial_jac=false,
 ) where {T}
   # ── Setup ────────────────────────────────────────────────────────────────────────────────
   if !isnothing(batchdim) && !(batchdim in (1, 2))
@@ -323,6 +361,30 @@ function levenberg_marquardt!(
   λv = reshape(λ, lane3)
   rollback = similar(x, Bool, lane_shape)
 
+  # Bounds and step limit (arrays of the shape of x), and what they need
+  bounded = !isnothing(lower) || !isnothing(upper)
+  limited = bounded || !isnothing(maxstep)
+  lo = similar(x)
+  hi = similar(x)
+  lo .= isnothing(lower) ? FT(-Inf) : lower
+  hi .= isnothing(upper) ? FT(Inf) : upper
+  if bounded && !all(lo .<= x .<= hi)
+    error("levenberg_marquardt: the initial x must lie within the bounds `lower` and `upper`.")
+  end
+  lo2, hi2 = as2(lo), as2(hi)
+  free = similar(x, Bool)        # unknowns that are not held on a bound
+  fill!(free, true)
+  free2 = as2(free)
+  freec = reshape(free, v_shape) # along the column (variable) dimension of J and H
+  freer = bd == 1 ? similar(x, Bool, n, B) : nothing # along the first dimension of H
+  step = similar(x)              # largest step per unknown
+  step .= isnothing(maxstep) ? FT(Inf) : maxstep
+  step2 = as2(step)
+  ylin = limited ? similar(S, bd == 1 ? (m, B, 1) : (m, 1, B)) : nothing
+  # Residual and Jacobian at the trial point
+  jact = trial_jac ? similar(jac) : nothing
+  Jtv = trial_jac ? reshape(batched ? nonzeros(jact) : jact, J_shape) : nothing
+
   if verbose
     batched && println("Batched-LM: printed norms are for entire batch")
     println("Iteration   norm(y)          norm(dx)         max(lambda)")
@@ -348,7 +410,11 @@ function levenberg_marquardt!(
 
     gn2 = sum(abs2, g2; dims=od)
     finite = @. isfinite(cost) & isfinite(gn2)
-    grad_ok = all(abs.(g2) .<= gradtol .* sqrt.(Dsq2) .* sqrt.(cost); dims=od)
+    if bounded
+      # Held: on a bound, with the descent direction -g pointing out of the bounds
+      @. free = !(((x <= lo) & (g > zeroT)) | ((x >= hi) & (g < zeroT)))
+    end
+    grad_ok = all((abs.(g2) .<= gradtol .* sqrt.(Dsq2) .* sqrt.(cost)) .| .!free2; dims=od)
     active = iters .== -1
     conv = @. active & finite & ((cost < abstol2) | grad_ok)
     fail = @. active & !finite
@@ -375,42 +441,82 @@ function levenberg_marquardt!(
     # Add λ D to the diagonal, per problem. Finished/failed problems get an identity block and a
     # zero right-hand side instead, so the linear solver never sees their (possibly NaN) data.
     act3 = reshape(active, lane3)
-    @. Hv = ifelse(act3, Hv + λv * Iv * Dv, Iv)
-    @. rhs = ifelse(active, -g, zeroT)
+    if bounded
+      # Held unknowns leave the system: identity row and column, zero right-hand side
+      fr = bd == 1 ? reshape(permutedims!(freer, free, (2, 1)), n, B, 1) : reshape(free, n, 1, B)
+      @. Hv = ifelse(act3, Hv * fr * freec + Iv * ifelse(freec, λv * Dv, oneT), Iv)
+      @. rhs = ifelse(active & free, -g, zeroT)
+    else
+      @. Hv = ifelse(act3, Hv + λv * Iv * Dv, Iv)
+      @. rhs = ifelse(active, -g, zeroT)
+    end
     solver(dx, A, rhs)
 
     # ── 3. Trial point and gain ratio ──────────────────────────────────────────────────────
     # Only step where the solve produced a finite dx; elsewhere evaluate at the current x
     # (which yields ρ = 0 → rejection and a larger λ).
     use = active .& all(isfinite, dx2; dims=od)
-    @. xt2 = ifelse(use, x2 + dx2, x2)
-    val!(yt, xt, contexts...)
+    if limited
+      # Shorten the step as a whole to the step limit, clamp the trial point to the bounds, and
+      # continue with the step actually taken (zero where there is none)
+      shorten = minimum(ifelse.(dx2 .== zeroT, FT(Inf), step2 ./ abs.(dx2)); dims=od)
+      @. xt2 = ifelse(use, clamp(x2 + min(oneT, shorten) * dx2, lo2, hi2), x2)
+      @. dx2 = xt2 - x2
+    else
+      @. xt2 = ifelse(use, x2 + dx2, x2)
+    end
+    if trial_jac
+      val_and_jac!(yt, jact, xt, contexts...)
+    else
+      val!(yt, xt, contexts...)
+    end
     costt = sum(abs2, yt2; dims=od)
-    @. rhs2 = dx2 * (λ * D2 * dx2 + rhs2)            # dxᵀ(λ D dx - g), elementwise (rhs = -g)
-    pred = sum(rhs2; dims=od)                        # 2 × predicted reduction
+    if limited
+      # Reduction predicted by the linear model for the step taken: ‖y‖² - ‖y + J dx‖²
+      @. S = Jv * $reshape(dx, v_shape)
+      ylin .= yb .+ sum(S; dims=cdim)
+      pred = cost .- reshape(sum(abs2, ylin; dims=1), lane_shape)
+    else
+      @. rhs2 = dx2 * (λ * D2 * dx2 + rhs2)          # dxᵀ(λ D dx - g), elementwise (rhs = -g)
+      pred = sum(rhs2; dims=od)                      # 2 × predicted reduction
+    end
     ρ = @. ifelse(pred > zeroT, (cost - costt) / pred, -oneT)
     accept = @. use & isfinite(costt) & (ρ > ρmin)
 
     # ── 4. Accept, then verify the new point ───────────────────────────────────────────────
     copyto!(xs, x)                                   # saved so unusable steps can be undone
     fill!(rollback, false)
-    @. x2 = ifelse(accept, xt2, x2)
-    if any(accept)
-      val_and_jac!(y, jac, x, contexts...)
-      # A step is only kept if the residual AND Jacobian at the new point are finite. Otherwise
-      # it is rolled back and counted as a rejection (so damping grows below).
-      jok = reshape(all(isfinite, Jv; dims=jdims), lane_shape)
-      yok = all(isfinite, y2; dims=od)
-      @. rollback = accept & !(jok & yok)
-      if any(rollback)
-        @. x2 = ifelse(rollback, xs2, x2)
-        @. accept = accept & !rollback
-        val_and_jac!(y, jac, x, contexts...)         # restore y, jac at the rolled-back x
+    if trial_jac
+      # Residual and Jacobian of the trial point are already there: a step is only accepted if
+      # both are finite, and takes them
+      jokt = reshape(all(isfinite, Jtv; dims=jdims), lane_shape)
+      @. accept = accept & jokt
+      @. x2 = ifelse(accept, xt2, x2)
+      @. y2 = ifelse(accept, yt2, y2)
+      acc3 = reshape(accept, lane3)
+      @. Jv = ifelse(acc3, Jtv, Jv)
+    else
+      @. x2 = ifelse(accept, xt2, x2)
+      if any(accept)
+        val_and_jac!(y, jac, x, contexts...)
+        # A step is only kept if the residual AND Jacobian at the new point are finite.
+        # Otherwise it is rolled back and counted as a rejection (so damping grows below).
+        jok = reshape(all(isfinite, Jv; dims=jdims), lane_shape)
+        yok = all(isfinite, y2; dims=od)
+        @. rollback = accept & !(jok & yok)
+        if any(rollback)
+          @. x2 = ifelse(rollback, xs2, x2)
+          @. accept = accept & !rollback
+          val_and_jac!(y, jac, x, contexts...)       # restore y, jac at the rolled-back x
+        end
       end
     end
 
     # ── 5. Damping update (rejected = not accepted, incl. rolled-back steps) ───────────────
     trial_ok = @. use & isfinite(costt)              # the step and its residual were finite
+    if trial_jac
+      @. trial_ok = trial_ok & jokt                  # (and its Jacobian)
+    end
     atmax = @. active & !accept & (λ >= λmax)        # rejected although damping was already maximal
     @. λ = ifelse(active,
       clamp(ifelse(accept, λ * max(thirdT, oneT - (2ρ - oneT)^3), λ * ν), λmin, λmax),
