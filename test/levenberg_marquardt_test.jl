@@ -625,4 +625,116 @@ end
     end
 end
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+@testset "bounds, step limit and Jacobian at the trial point" begin
+    @testset "bounds, unbatched" begin
+        # Rosenbrock with x₁ ≤ 0.5: the minimum within the bounds is (0.5, 0.25), where the
+        # second residual 1 - x₁ = 0.5 cannot be reduced
+        free = levenberg_marquardt(ros_vec, [-1.2, 1.0], Constant(1.0); maxiter=300)
+        out = levenberg_marquardt(ros_vec, [-1.2, 1.0], Constant(1.0); maxiter=300, upper=[0.5, Inf])
+        @test free.u ≈ [1.0, 1.0] atol = 1e-6                    # (without the bound: the root)
+        @test out.retcode == RETCODE_SUCCESS
+        @test out.u ≈ [0.5, 0.25] atol = 1e-6
+        @test out.u[1] <= 0.5
+        @test out.f ≈ [0.0, 0.5] atol = 1e-6
+        # f(x) = x - c: the minimum within a box is c clamped to it; a scalar bound applies to all
+        c = [3.0, -2.0, 0.5]
+        out = levenberg_marquardt((x, cc) -> x .- cc, zeros(3), Constant(c); lower=-1.0, upper=[1.0, 1.0, 2.0])
+        @test out.retcode == RETCODE_SUCCESS
+        @test out.u ≈ clamp.(c, -1.0, [1.0, 1.0, 2.0]) atol = 1e-8
+        # Bounds that are never reached change nothing but round-off
+        wide = levenberg_marquardt(ros_vec, [-1.2, 1.0], Constant(1.0); maxiter=300, lower=-10.0, upper=10.0)
+        @test wide.u ≈ free.u atol = 1e-8
+        @test wide.iters == free.iters
+        # Starting on a bound that the solution leaves, and on one where it stays
+        out = levenberg_marquardt((x, cc) -> x .- cc, [-1.0, -1.0, -1.0], Constant(c); lower=-1.0)
+        @test out.u ≈ [3.0, -1.0, 0.5] atol = 1e-8
+        @test out.u[2] == -1.0
+        @test_throws ErrorException levenberg_marquardt(x -> x .- 1, [2.0]; upper=1.0)
+        out32 = levenberg_marquardt(x -> x .^ 2 .- 2f0, [1f0]; upper=1.2f0)
+        @test eltype(out32.u) == Float32
+        @test out32.u[1] == 1.2f0
+    end
+
+    rng = MersenneTwister(7)
+    B = 9
+    s = 0.5 .+ rand(rng, B)
+    for bd in (1, 2)
+        X0 = ros_start(rng, B, bd)
+        ub1 = collect(range(0.2, 1.4; length=B))                # per-problem upper bound of x₁
+        up = bd == 1 ? hcat(ub1, fill(Inf, B)) : Matrix(permutedims(hcat(ub1, fill(Inf, B))))
+        @testset "bounds per batch element, batchdim=$bd" begin
+            out = solve_ros(bd, X0, s; upper=up)
+            @test all(out.retcode .== RETCODE_SUCCESS)
+            for k in 1:B
+                u = lane_of(out.u, k, bd)
+                x1 = min(1.0, ub1[k])                            # the bound holds only below the root
+                @test u ≈ [x1, x1^2] atol = 1e-5
+                @test u[1] <= ub1[k]
+                # ... and every element behaves exactly as if it were alone
+                alone = solve_ros(bd, sub_batch(X0, k:k, bd), s[k:k]; upper=sub_batch(up, k:k, bd))
+                @test vec(alone.u) == u
+                @test alone.iters[1] == out.iters[k]
+            end
+        end
+        @testset "Jacobian at the trial point: same iterates, batchdim=$bd" begin
+            base = solve_ros(bd, X0, s; upper=up)
+            out = solve_ros(bd, X0, s; upper=up, trial_jac=true)
+            @test out.u == base.u
+            @test out.f == base.f
+            @test out.iters == base.iters
+            @test out.retcode == base.retcode
+            @test nonzeros(out.jac) == nonzeros(base.jac)
+            @test solve_ros(bd, X0, s; trial_jac=true).u == solve_ros(bd, X0, s).u
+        end
+    end
+
+    @testset "Jacobian at the trial point: evaluations" begin
+        for bd in (nothing, 1, 2)
+            # (the unbatched instrumented problem has one unknown)
+            x0, c = isnothing(bd) ? ([0.0], [5.0]) : ([0.0, 0.0, 0.0], [1.0, 5.0, -3.0])
+            base = run_instrumented(bd, x0, c)
+            r = run_instrumented(bd, x0, c; trial_jac=true)
+            @test r.x == base.x
+            @test r.lg.ntrial == 0                               # no residual-only evaluation
+            @test r.lg.njac < base.lg.njac + base.lg.ntrial     # fewer evaluations in total
+            @test base.lg.ntrial > 0
+        end
+        # A non-finite Jacobian at a trial point rejects the step (and the damping grows)
+        for bd in (1, 2)
+            r = run_instrumented(bd, [0.0, 0.0, 0.0], [1.0, 5.0, -3.0]; mode=:jac, K=3, trial_jac=true)
+            @test all(r.out.retcode .== RETCODE_SUCCESS)
+            @test vec(r.x) ≈ [1.0, 5.0, -3.0] atol = 1e-6
+            @test all(isfinite, nonzeros(r.jac))
+            @test r.lg.nbad == 3
+        end
+    end
+
+    @testset "step limit" begin
+        for bd in (nothing, 1, 2)
+            x0, c = isnothing(bd) ? ([0.0], [10.0]) : ([0.0, 0.0, 0.0], [1.0, 10.0, -3.0])
+            r = run_instrumented(bd, x0, c; maxstep=0.5, maxiter=300)
+            @test all(r.out.retcode .== RETCODE_SUCCESS)
+            @test vec(r.x) ≈ c atol = 1e-6
+            # No trial point is further than the limit from the one before
+            prev = copy(x0)
+            far = 0.0
+            for t in r.lg.trials
+                far = max(far, maximum(abs.(t .- prev)))
+                prev = t
+            end
+            @test far <= 0.5 + 1e-12
+            @test length(r.lg.trials) >= 20                      # 10 / 0.5 steps for the far root
+            nolimit = run_instrumented(bd, x0, c)
+            @test length(nolimit.lg.trials) < length(r.lg.trials)
+        end
+        # Per-unknown limits, and a limit that is never reached
+        out = levenberg_marquardt((x, cc) -> x .- cc, zeros(2), Constant([4.0, 4.0]); maxstep=[0.25, Inf], maxiter=300)
+        @test out.u ≈ [4.0, 4.0] atol = 1e-6
+        free = levenberg_marquardt(ros_vec, [-1.2, 1.0], Constant(1.0); maxiter=300)
+        wide = levenberg_marquardt(ros_vec, [-1.2, 1.0], Constant(1.0); maxiter=300, maxstep=100.0)
+        @test wide.u ≈ free.u atol = 1e-8
+    end
+end
+
 end # @testset "levenberg_marquardt"
