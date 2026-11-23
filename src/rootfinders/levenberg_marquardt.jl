@@ -44,8 +44,9 @@ solver.
 - `damping_min`, `damping_max`: Bounds on λ; defaults `1e-10`, `1e10`.
 - `accept_ratio`: A step is accepted when (actual reduction)/(predicted reduction) exceeds
   this value; default `1e-4`.
-- `diagmin`, `diagmax`: `diag(JᵀJ)` is clamped to `[diagmin, diagmax]` to form the Marquardt
-  damping scale `D`; defaults `1e-6`, `1e16`.
+- `diagmin`, `diagmax`: `diag(JᵀJ)` is clamped to `[diagmin, diagmax]` times its largest entry
+  (per problem) to form the Marquardt damping scale `D` (`D = 1` if the Jacobian is zero), so that
+  rescaling a variable does not change the iteration; defaults `1e-6`, `1e16`.
 - `lower`, `upper`: Bounds on the unknowns (a number, or an array of the shape of `x`, so that
   every batch element may have its own); default `nothing` (no bounds). The initial `x` must
   lie within them. Every trial point is clamped to the bounds, and an unknown that sits on a
@@ -203,9 +204,10 @@ end
 Core Levenberg–Marquardt loop. Accepts a residual-only callable and a combined
 value-and-Jacobian callable, and iterates
 
-    (JᵀJ + λ D) dx = -Jᵀy,    D = clamp(diag(JᵀJ), diagmin, diagmax)
+    (JᵀJ + λ D) dx = -Jᵀy,    D = clamp(diag(JᵀJ), diagmin*m, diagmax*m)
 
-with a Nielsen-style adaptive λ, until convergence or `maxiter`.
+with `m` the largest entry of `diag(JᵀJ)`, and a Nielsen-style adaptive λ, until convergence or
+`maxiter`.
 
 # Arguments
 - `val!`: Callable `(y, x, contexts...) -> nothing` filling the residual `y` in-place. Used for
@@ -437,7 +439,10 @@ function levenberg_marquardt!(
     else
       mul!(A, transpose(jac), jac)
     end
-    @. D = clamp(Dsq, dmin, dmax)
+    # Bounds relative to the largest entry, so that rescaling a variable (e.g. its units) does not
+    # change the iteration; an all-zero Jacobian (no information) gets D = 1
+    Dm = maximum(Dsq2; dims=od)
+    @. D2 = ifelse(Dm > zeroT, clamp(Dsq2, dmin * Dm, dmax * Dm), oneT)
     # Add λ D to the diagonal, per problem. Finished/failed problems get an identity block and a
     # zero right-hand side instead, so the linear solver never sees their (possibly NaN) data.
     act3 = reshape(active, lane3)

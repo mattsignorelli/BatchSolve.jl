@@ -343,6 +343,22 @@ end
         end
     end
 
+    @testset "the units of the unknowns do not change the iteration" begin
+        # The bounds of the Marquardt scale D are relative to the largest entry of diag(JᵀJ): with
+        # the unknowns in other units (x = s*u), the iterates are the same up to the scale. With
+        # the bounds absolute, entries of diag(JᵀJ) below 1e-6 were raised to it, and this problem
+        # took 21 iterations with s = 1e-5 and 114 with s = 1e-8, instead of 32
+        ros(x) = [10*(x[2] - x[1]^2), 1 - x[1]]
+        ref = levenberg_marquardt(ros, [-1.2, 1.0]; maxiter=300, reltol=0.0)
+        @test ref.retcode == RETCODE_SUCCESS
+        for s in (1e-5, 1e-8, 1e5)
+            out = levenberg_marquardt(u -> ros(s .* u), [-1.2, 1.0] ./ s; maxiter=300, reltol=0.0)
+            @test out.retcode == RETCODE_SUCCESS
+            @test out.iters == ref.iters
+            @test s .* out.u ≈ ref.u
+        end
+    end
+
     @testset "start at a stationary point of a least-squares problem" begin
         rng = MersenneTwister(8)
         A = randn(rng, 6, 3)

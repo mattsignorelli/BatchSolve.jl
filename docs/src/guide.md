@@ -51,7 +51,7 @@ residuals `m` may differ from the number of unknowns `n` (it finds a root where 
 Each step solves the damped normal equations
 
 ```math
-(J^T J + \lambda D)\, \Delta x = -J^T f, \qquad D = \mathrm{clamp}(\mathrm{diag}(J^T J),\ \texttt{diagmin},\ \texttt{diagmax})
+(J^T J + \lambda D)\, \Delta x = -J^T f, \qquad D = \mathrm{clamp}(\mathrm{diag}(J^T J),\ \texttt{diagmin}\,m,\ \texttt{diagmax}\,m),\ m = \max \mathrm{diag}(J^T J)
 ```
 
 with the Jacobian `J` at the current point. A small damping λ gives the Gauss-Newton step, a large
